@@ -1,0 +1,44 @@
+{
+  "permissions": {
+    "ask": [
+      "Bash(sudo *)",
+      "Bash(pkexec *)",
+      "Bash(dnf *)",
+      "Bash(rpm *)",
+      "Bash(systemctl *)",
+      "Bash(usermod *)",
+      "Bash(rm -rf *)",
+      "Bash(chmod *)",
+      "Bash(chown *)",
+      "Edit(/etc/**)",
+      "Write(/etc/**)"
+    ]
+  },
+  "model": "opusplan",
+  "hooks": {
+    "Notification": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "setsid -f ~/.local/bin/speak-away 'Claude needs your attention' >/dev/null 2>&1"
+          }
+        ]
+      }
+    ]
+  },
+  "enabledPlugins": {
+    "frontend-design@claude-plugins-official": true,
+    "commit-commands@claude-plugins-official": true,
+    "code-simplifier@claude-plugins-official": true,
+    "pyright-lsp@claude-plugins-official": true,
+    "typescript-lsp@claude-plugins-official": true,
+    "clangd-lsp@claude-plugins-official": true
+  },
+  "voice": {
+    "enabled": true,
+    "mode": "hold"
+  },
+  "theme": "auto",
+  "voiceEnabled": true
+}

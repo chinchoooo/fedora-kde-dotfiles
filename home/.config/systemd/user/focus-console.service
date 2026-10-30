@@ -1,0 +1,6 @@
+[Unit]
+Description=focus-console flag
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/bash -c 'touch %h/.cache/focus-console'
