@@ -13,3 +13,4 @@ models/
 kdeconnect*
 kwallet*
 .env
+.sync.lock

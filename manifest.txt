@@ -77,3 +77,4 @@
 ~/.claude/skills/kaggle-run/  claude/skills/kaggle-run/
 /etc/udev/rules.d/60-uinput-uaccess.rules  system/60-uinput-uaccess.rules
 /etc/udev/rules.d/61-voice-input-uaccess.rules  system/61-voice-input-uaccess.rules
+~/.claude/settings.json  claude/settings.json

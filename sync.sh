@@ -6,6 +6,7 @@
 # Env: DOTFILES_MANIFEST=<file> (testing), DOTFILES_NO_PUSH=1
 set -uo pipefail
 REPO="$(cd "$(dirname "$0")" && pwd)"; cd "$REPO"
+exec 9>"$REPO/.sync.lock"; flock -n 9 || { echo "another sync is running"; exit 0; }
 MANIFEST="${DOTFILES_MANIFEST:-$REPO/manifest.txt}"
 DENY="$REPO/denylist.txt"; ALLOW="$REPO/scan-allow.txt"
 PRIVATE_TERMS="$HOME/.config/dotfiles-sync/private-terms.txt"   # local-only list of names/handles that must never appear (not in the repo)
