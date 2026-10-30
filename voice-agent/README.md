@@ -12,10 +12,10 @@ On-device speech tools for this machine.
 ## voice-act
 1. First press records (`pw-record`, 16 kHz mono), second press stops and runs `voice_act.py` at `nice -n 19`.
 2. faster-whisper `small.en` (int8, CPU) transcribes locally; audio is decoded from raw samples via `wave` (PyAV is broken here).
-3. The transcript text goes to `claude -p --output-format json` (Haiku, no tools, no session saved). The system prompt resolves nicknames/mishearings
+3. The transcript text goes to `claude -p` (Haiku, no tools). It returns one action: open_url, search, launch_app, media, volume or none. Any http(s) site is allowed; nothing destructive is offered, and shell commands are never produced.
    ("Kdrill's channel" -> Caedrel) and returns one JSON action.
-4. The action is validated: https only, no userinfo/port tricks, host must be twitch.tv, youtube.com, kaggle.com, github.com, google.com or wikipedia.org (subdomains ok).
-5. A notification offers a 5-second Cancel; `VOICE_ACT_AUTO=1` skips it. Then `xdg-open` and a spoken confirmation.
+4. Validation only checks the action type, http(s) URLs and that an app exists. There is no domain allowlist.
+5. It runs immediately and shows a short toast; set VOICE_ACT_CONFIRM=1 to get a 5 s cancel countdown first.
 
 Test without a mic or side effects: `venv/bin/python voice_act.py --wav file.wav --dry-run` (or `--text "..."`). `--dry-run` never opens anything.
 
