@@ -4,7 +4,7 @@ function start(unit) {
 }
 registerShortcut("Dictate on-device", "Dictate on-device (toggle)", "Alt+Space", function () { start("dictate"); });
 registerShortcut("Dictate on-device 2", "Dictate on-device (alternate key)", "Ctrl+Alt+Space", function () { start("dictate"); });
-registerShortcut("Split Konsole and Helium", "Split Konsole and Helium", "Meta+Alt+S", function () { start("tile-split"); });
+registerShortcut("Split Konsole and Helium", "Split Konsole and Helium", "Meta+Alt+T", function () { start("tile-split"); });
 // focus flag: lets spoken replies stay silent while the user is in the terminal
 function flag(w) {
   var c = w ? String(w.resourceClass).toLowerCase() : "";
