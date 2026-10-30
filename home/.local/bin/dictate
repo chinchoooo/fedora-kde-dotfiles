@@ -1,0 +1,22 @@
+#!/bin/bash
+# On-device dictation toggle: run once to start recording, again to stop, transcribe locally (faster-whisper) and copy to clipboard.
+D=$HOME/code/voice-agent
+PID=/tmp/dictate.pid; WAV=/tmp/dictate.wav
+if [ -f "$PID" ] && kill -0 "$(cat $PID)" 2>/dev/null; then
+  kill "$(cat $PID)"; rm -f "$PID"; sleep 0.3
+  notify-send -t 1500 "Dictation" "Transcribing on this device..."
+  TXT=$("$D/venv/bin/python" -c "
+import sys
+from faster_whisper import WhisperModel
+m = WhisperModel('small.en', device='cpu', compute_type='int8', cpu_threads=4, download_root='$D/models')
+import wave, numpy as np
+w = wave.open('$WAV'); a = np.frombuffer(w.readframes(w.getnframes()), np.int16).astype(np.float32) / 32768.0
+segs, _ = m.transcribe(a, vad_filter=True, beam_size=1)
+print(' '.join(s.text.strip() for s in segs))" 2>/dev/null)
+  printf '%s' "$TXT" | wl-copy
+  notify-send -t 4000 "Dictation copied (Ctrl+Shift+V to paste)" "$TXT"
+else
+  pw-record --rate 16000 --channels 1 --format s16 "$WAV" &
+  echo $! > "$PID"
+  notify-send -t 1500 "Dictation" "Recording... press the shortcut again to stop"
+fi

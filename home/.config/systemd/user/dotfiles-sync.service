@@ -1,0 +1,8 @@
+[Unit]
+Description=Sync live dotfiles into the private repo (allowlist + secret scan)
+
+[Service]
+Type=oneshot
+Nice=19
+IOSchedulingClass=idle
+ExecStart=%h/code/dotfiles/sync.sh

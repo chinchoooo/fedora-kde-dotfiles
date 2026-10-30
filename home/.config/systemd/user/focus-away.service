@@ -1,0 +1,6 @@
+[Unit]
+Description=focus-away flag
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/bash -c 'rm -f %h/.cache/focus-console'

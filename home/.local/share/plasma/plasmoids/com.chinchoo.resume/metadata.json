@@ -1,0 +1,13 @@
+{
+  "KPackageStructure": "Plasma/Applet",
+  "KPlugin": {
+    "Id": "com.chinchoo.resume",
+    "Name": "Pick Up Where I Left Off",
+    "Description": "Reopen recent projects and resume Claude Code sessions",
+    "Icon": "document-open-recent",
+    "Category": "Utilities",
+    "Version": "1.0",
+    "License": "GPL-2.0+"
+  },
+  "X-Plasma-API-Minimum-Version": "6.0"
+}

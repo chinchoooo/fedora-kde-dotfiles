@@ -1,0 +1,13 @@
+{
+  "KPackageStructure": "Plasma/Applet",
+  "KPlugin": {
+    "Id": "com.chinchoo.sysdiag",
+    "Name": "System Diagnostics",
+    "Description": "CPU, memory, network and temperature graphs",
+    "Icon": "utilities-system-monitor",
+    "Category": "System",
+    "Version": "1.0",
+    "License": "GPL-2.0+"
+  },
+  "X-Plasma-API-Minimum-Version": "6.0"
+}

@@ -1,0 +1,4 @@
+#!/bin/bash
+# Speak only when the user is NOT focused on the Konsole (Claude console)
+[ -e "$HOME/.cache/focus-console" ] && exit 0
+exec "$HOME/.local/bin/speak" "$@"

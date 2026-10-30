@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=Voice command (on-device audio)
+Exec=@HOME@/.local/bin/voice-act
+Icon=audio-input-microphone
+NoDisplay=true
+X-KDE-GlobalAccel-CommandShortcut=true

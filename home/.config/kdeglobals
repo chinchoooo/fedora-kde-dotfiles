@@ -1,0 +1,165 @@
+[ColorEffects:Disabled]
+ChangeSelectionColor=
+Color=56,56,56
+ColorAmount=0
+ColorEffect=0
+ContrastAmount=0.65
+ContrastEffect=1
+Enable=
+IntensityAmount=0.1
+IntensityEffect=2
+
+[ColorEffects:Inactive]
+ChangeSelectionColor=true
+Color=112,111,110
+ColorAmount=0.025
+ColorEffect=2
+ContrastAmount=0.1
+ContrastEffect=2
+Enable=false
+IntensityAmount=0
+IntensityEffect=0
+
+[Colors:Button]
+BackgroundAlternate=95,123,183
+BackgroundNormal=34,34,34
+DecorationFocus=122,162,247
+DecorationHover=122,162,247
+ForegroundActive=122,162,247
+ForegroundInactive=140,140,140
+ForegroundLink=122,162,247
+ForegroundNegative=242,95,92
+ForegroundNeutral=245,180,80
+ForegroundNormal=225,225,225
+ForegroundPositive=120,200,120
+ForegroundVisited=187,154,247
+
+[Colors:Complementary]
+BackgroundAlternate=12,12,12
+BackgroundNormal=18,18,18
+DecorationFocus=122,162,247
+DecorationHover=122,162,247
+ForegroundActive=122,162,247
+ForegroundInactive=140,140,140
+ForegroundLink=122,162,247
+ForegroundNegative=242,95,92
+ForegroundNeutral=245,180,80
+ForegroundNormal=225,225,225
+ForegroundPositive=120,200,120
+ForegroundVisited=187,154,247
+
+[Colors:Header]
+BackgroundAlternate=12,12,12
+BackgroundNormal=12,12,12
+DecorationFocus=122,162,247
+DecorationHover=122,162,247
+ForegroundActive=122,162,247
+ForegroundInactive=140,140,140
+ForegroundLink=122,162,247
+ForegroundNegative=242,95,92
+ForegroundNeutral=245,180,80
+ForegroundNormal=225,225,225
+ForegroundPositive=120,200,120
+ForegroundVisited=187,154,247
+
+[Colors:Selection]
+BackgroundAlternate=89,117,177
+BackgroundNormal=89,117,177
+DecorationFocus=122,162,247
+DecorationHover=122,162,247
+ForegroundActive=122,162,247
+ForegroundInactive=255,255,255
+ForegroundLink=43,118,219
+ForegroundNegative=12,12,12
+ForegroundNeutral=12,12,12
+ForegroundNormal=255,255,255
+ForegroundPositive=12,12,12
+ForegroundVisited=12,12,12
+
+[Colors:Tooltip]
+BackgroundAlternate=28,28,28
+BackgroundNormal=28,28,28
+DecorationFocus=122,162,247
+DecorationHover=122,162,247
+ForegroundActive=122,162,247
+ForegroundInactive=140,140,140
+ForegroundLink=122,162,247
+ForegroundNegative=242,95,92
+ForegroundNeutral=245,180,80
+ForegroundNormal=225,225,225
+ForegroundPositive=120,200,120
+ForegroundVisited=187,154,247
+
+[Colors:View]
+BackgroundAlternate=22,22,22
+BackgroundNormal=14,14,14
+DecorationFocus=122,162,247
+DecorationHover=122,162,247
+ForegroundActive=122,162,247
+ForegroundInactive=140,140,140
+ForegroundLink=122,162,247
+ForegroundNegative=242,95,92
+ForegroundNeutral=245,180,80
+ForegroundNormal=225,225,225
+ForegroundPositive=120,200,120
+ForegroundVisited=187,154,247
+
+[Colors:Window]
+BackgroundAlternate=26,26,26
+BackgroundNormal=20,20,20
+DecorationFocus=122,162,247
+DecorationHover=122,162,247
+ForegroundActive=122,162,247
+ForegroundInactive=140,140,140
+ForegroundLink=122,162,247
+ForegroundNegative=242,95,92
+ForegroundNeutral=245,180,80
+ForegroundNormal=225,225,225
+ForegroundPositive=120,200,120
+ForegroundVisited=187,154,247
+
+[General]
+AccentColor=122,162,247
+BrowserApplication=helium.desktop
+ColorSchemeHash=f77f727d924914258497f7cb6051f7bfccf705ec
+accentColorFromWallpaper=false
+fixed=JetBrainsMono Nerd Font Mono,10,-1,5,400,0,0,0,0,0,0,0,0,0,0,1
+font=JetBrainsMono Nerd Font,10,-1,5,400,0,0,0,0,0,0,0,0,0,0,1
+menuFont=JetBrainsMono Nerd Font,10,-1,5,400,0,0,0,0,0,0,0,0,0,0,1
+smallestReadableFont=JetBrainsMono Nerd Font,8,-1,5,400,0,0,0,0,0,0,0,0,0,0,1
+toolBarFont=JetBrainsMono Nerd Font,10,-1,5,400,0,0,0,0,0,0,0,0,0,0,1
+
+[Icons]
+Theme=Gruvbox-Plus-Dark
+
+[KDE]
+AnimationDurationFactor=0
+LookAndFeelPackage=org.fedoraproject.fedoradark.desktop
+contrast=7
+frameContrast=0.2
+
+[KFileDialog Settings]
+Allow Expansion=false
+Automatically select filename extension=true
+Breadcrumb Navigation=true
+Decoration position=2
+Show Full Path=false
+Show Inline Previews=true
+Show Preview=false
+Show Speedbar=true
+Show hidden files=false
+Sort by=Name
+Sort directories first=true
+Sort hidden files last=false
+Sort reversed=false
+Speedbar Width=160
+View Style=DetailTree
+
+[WM]
+activeBackground=12,12,12
+activeBlend=225,225,225
+activeFont=JetBrainsMono Nerd Font,10,-1,5,700,0,0,0,0,0,0,0,0,0,0,1
+activeForeground=225,225,225
+inactiveBackground=20,20,20
+inactiveBlend=140,140,140
+inactiveForeground=140,140,140

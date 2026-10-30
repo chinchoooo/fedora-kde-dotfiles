@@ -1,0 +1,9 @@
+[Unit]
+Description=ydotool daemon (on-device typing)
+
+[Service]
+ExecStart=/usr/bin/ydotoold --socket-path=%t/.ydotool_socket
+Restart=on-failure
+
+[Install]
+WantedBy=default.target

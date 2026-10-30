@@ -1,0 +1,14 @@
+#!/bin/bash
+# Toggle: first run records, second run stops and acts. Audio stays on this machine; only the transcript text goes to Claude.
+# Flags: any args are passed through to voice_act.py (e.g. --dry-run). VOICE_ACT_AUTO=1 skips the 5s confirmation.
+D=$HOME/code/voice-agent
+PID=/tmp/voice-act.pid; WAV=/tmp/voice-act.wav
+if [ -f "$PID" ] && kill -0 "$(cat $PID)" 2>/dev/null; then
+  kill "$(cat $PID)"; rm -f "$PID"; sleep 0.3
+  notify-send -t 1500 "Voice command" "Transcribing on this device..."
+  nice -n 19 "$D/venv/bin/python" "$D/voice_act.py" --wav "$WAV" "$@"
+else
+  pw-record --rate 16000 --channels 1 --format s16 "$WAV" &
+  echo $! > "$PID"
+  notify-send -t 1500 "Voice command" "Listening... press Ctrl+Alt+V again to act"
+fi

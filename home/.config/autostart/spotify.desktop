@@ -1,0 +1,5 @@
+[Desktop Entry]
+Type=Application
+Name=Spotify
+Exec=flatpak run com.spotify.Client --minimized
+X-KDE-autostart-after=panel

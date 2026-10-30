@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=Split Konsole and Helium
+Exec=@HOME@/.local/bin/tile-split
+Icon=view-split-left-right
+NoDisplay=true
+X-KDE-GlobalAccel-CommandShortcut=true

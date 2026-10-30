@@ -1,0 +1,11 @@
+[1]
+Description=Spotify starts minimized
+minimize=true
+minimizerule=3
+wmclass=spotify
+wmclasscomplete=false
+wmclassmatch=2
+
+[General]
+count=1
+rules=1

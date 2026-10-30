@@ -1,0 +1,5 @@
+#!/bin/bash
+# On-device text-to-speech with Piper; usage: speak "text"  (or pipe text in)
+D=$HOME/code/voice-agent/tts
+T="${*:-$(cat)}"
+printf '%s' "$T" | "$D/venv/bin/python" -m piper -m "$D/voices/en_US-lessac-medium.onnx" -f /tmp/speak-$$.wav >/dev/null 2>&1 && pw-play /tmp/speak-$$.wav; rm -f /tmp/speak-$$.wav

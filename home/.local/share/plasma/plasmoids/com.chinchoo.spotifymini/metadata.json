@@ -1,0 +1,13 @@
+{
+  "KPackageStructure": "Plasma/Applet",
+  "KPlugin": {
+    "Id": "com.chinchoo.spotifymini",
+    "Name": "Spotify Mini",
+    "Description": "Always-visible Spotify controls; starts Spotify on click",
+    "Icon": "spotify",
+    "Category": "Multimedia",
+    "Version": "1.0",
+    "License": "GPL-2.0+"
+  },
+  "X-Plasma-API-Minimum-Version": "6.0"
+}

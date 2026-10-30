@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=Dictate (on-device)
+Exec=@HOME@/.local/bin/dictate
+Icon=audio-input-microphone
+NoDisplay=true
+X-KDE-GlobalAccel-CommandShortcut=true
