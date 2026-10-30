@@ -16,8 +16,33 @@ put() {  # put <repo file> <dest>
   echo "installed ${dst#$HOME/}"
 }
 
-while IFS= read -r -d '' f; do put "$f" "$HOME/${f#home/}"; done < <(find home -type f -print0)
+while IFS= read -r -d '' f; do put "$f" "$HOME/${f#home/}"; done < <(find home -type f ! -name '*.template.json' -print0)
 while IFS= read -r -d '' f; do put "$f" "$HOME/code/voice-agent/${f#voice-agent/}"; done < <(find voice-agent -type f -print0)
+# resume-widget pins: expand @HOME@ and local aliases (~/.config/dotfiles-sync/path-aliases.txt: name=@TOKEN@); merge, never overwrite
+python3 - "$HOME" "$HOME/.config/dotfiles-sync/path-aliases.txt" <<'PY'
+import json, os, sys
+home, alias = sys.argv[1:3]
+amap = {}
+try:
+    for l in open(alias):
+        l = l.strip()
+        if l and not l.startswith("#") and "=" in l:
+            k, v = l.split("=", 1); amap[v.strip()] = k.strip()
+except OSError:
+    pass
+src, dst = "home/.config/resume-pins.template.json", os.path.join(home, ".config", "resume-pins.json")
+if os.path.exists(src):
+    cur = json.load(open(dst)) if os.path.exists(dst) else []
+    for p in json.load(open(src)):
+        p = p.replace("@HOME@", home)
+        for tok, name in amap.items():
+            p = p.replace(tok, name)
+        if "@" in p:
+            print("skipped pin (unresolved placeholder):", p); continue
+        if p not in cur and os.path.isdir(p):
+            cur.append(p)
+    json.dump(cur, open(dst, "w"))
+PY
 put kaggle-runs/kaggle_run.sh "$HOME/code/kaggle-runs/kaggle_run.sh"
 while IFS= read -r -d '' f; do put "$f" "$HOME/.claude/${f#claude/}"; done < <(find claude/skills -type f -print0)
 # Claude Code settings are not overwritten: merge by hand

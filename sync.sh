@@ -49,8 +49,33 @@ while read -r src dst; do
   copy_one "$src" "$dst"; n=$((n+1))
 done < "$MANIFEST"
 
+sync_pins() {  # resume-widget pins -> placeholders ($HOME and local-only path aliases), never raw paths
+  local live="$HOME/.config/resume-pins.json" out="home/.config/resume-pins.template.json"
+  [ -f "$live" ] || return 0
+  mkdir -p "$(dirname "$out")"
+  python3 - "$live" "$out" "$HOME" "$HOME/.config/dotfiles-sync/path-aliases.txt" <<'PY'
+import json, os, sys
+live, out, home, alias = sys.argv[1:5]
+amap = []
+try:
+    for l in open(alias):
+        l = l.strip()
+        if l and not l.startswith("#") and "=" in l:
+            k, v = l.split("=", 1); amap.append((k.strip(), v.strip()))
+except OSError:
+    pass
+res = []
+for p in json.load(open(live)):
+    if p.startswith(home): p = "@HOME@" + p[len(home):]
+    parts = ["/".join([next((v for k, v in amap if c == k), c) for c in p.split("/")])][0]
+    res.append(parts)
+json.dump(res, open(out, "w"), indent=1); open(out, "a").write("\n")
+PY
+}
+sync_pins
+
 # stage only manifest destinations and the generated package lists
-git add -A -- packages 2>/dev/null
+git add -A -- packages home/.config/resume-pins.template.json 2>/dev/null
 while read -r src dst; do case "$src" in ''|'#'*) continue;; esac; git add -A -- "$dst" 2>/dev/null; done < "$MANIFEST"
 
 if git diff --cached --quiet; then echo "nothing to commit ($n manifest entries)"; exit 0; fi

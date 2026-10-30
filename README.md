@@ -20,6 +20,17 @@ plus the on-device voice stack built on top of it. Private repository.
 - Global shortcuts live in a KWin script (`voice-shortcuts`): Ctrl+Alt+Space toggle dictation, Meta+Alt+S split Konsole/Helium.
 - `kaggle-runs/kaggle_run.sh` and the `kaggle-run` Claude Code skill wrap the Kaggle CLI (credentials are never stored here).
 
+## Keys and automation
+| Input | What it does |
+|---|---|
+| Hold **Right Ctrl** (about 0.3 s or longer) | push-to-talk dictation: records, transcribes on-device, types the text into the focused window |
+| **Ctrl+Alt+Space** | toggle dictation, text goes to the clipboard (paste with Ctrl+Shift+V) |
+| **Meta+Alt+S** | split screen: Konsole left, Helium right |
+| `voice-act` (command, no key) | speech to an allow-listed URL action, with a 5 s cancel |
+| Timer `dotfiles-sync.timer` | every 30 minutes and 2 minutes after login: copy allow-listed files, scan for secrets, commit, push; a hit blocks the push and sends a notification |
+The resume widget's pinned projects are stored as `home/.config/resume-pins.template.json` with `@HOME@` and private path names replaced by placeholders;
+`install.sh` expands them back (private names come from a local-only `~/.config/dotfiles-sync/path-aliases.txt`, `name=@TOKEN@` per line).
+
 ## Layout
 ```
 home/            files mirrored into $HOME ( @HOME@ is replaced by your home path on install )
