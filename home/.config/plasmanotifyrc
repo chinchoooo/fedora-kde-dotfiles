@@ -1,2 +1,5 @@
 [Applications][org.kde.konsole]
 ShowPopups=false
+
+[DoNotDisturb]
+NotificationSoundsMuted=true
