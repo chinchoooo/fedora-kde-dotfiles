@@ -6,7 +6,7 @@ On-device speech tools for this machine.
 |---|---|---|
 | `holdtalk.py` (service) | hold Right Ctrl | hold, speak, release: local Whisper types the text into the focused window |
 | `~/.local/bin/dictate` | Ctrl+Alt+Space | toggle record -> local Whisper -> clipboard |
-| `~/.local/bin/voice-act` | Meta+Alt+V | toggle record -> local Whisper -> Claude (text only) -> allowlisted action |
+| `holdtalk.py` + `voice_act.py` | hold Right Shift | hold, speak a command, release: local Whisper -> Claude (text only) -> allowlisted action |
 | `~/.local/bin/speak "text"` | - | on-device Piper text-to-speech |
 
 ## voice-act
