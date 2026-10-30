@@ -17,7 +17,7 @@ plus the on-device voice stack built on top of it. Private repository.
 - Hold **Right Ctrl** for push-to-talk: `holdtalk.service` records, faster-whisper (`small.en`, int8, CPU) transcribes, `ydotool` types the text.
 - `voice-act`: speech to a Claude text command to an allow-listed URL action. Only the transcript leaves the machine, never audio.
 - Spoken replies with Piper TTS (`speak`), silenced while the Konsole is focused (`speak-away` plus a focus flag set by a KWin script).
-- Global shortcuts live in a KWin script (`voice-shortcuts`): Ctrl+Alt+Space toggle dictation, Meta+Alt+S split Konsole/Helium.
+- Global shortcuts live in a KWin script (`voice-shortcuts`): Ctrl+Alt+Space toggle dictation, Meta+Alt+T split Konsole/Helium.
 - `kaggle-runs/kaggle_run.sh` and the `kaggle-run` Claude Code skill wrap the Kaggle CLI (credentials are never stored here).
 
 ## Keys and automation
@@ -25,7 +25,7 @@ plus the on-device voice stack built on top of it. Private repository.
 |---|---|
 | Hold **Right Ctrl** (about 0.3 s or longer) | push-to-talk dictation: records, transcribes on-device, types the text into the focused window |
 | **Ctrl+Alt+Space** | toggle dictation, text goes to the clipboard (paste with Ctrl+Shift+V) |
-| **Meta+Alt+S** | split screen: Konsole left, Helium right |
+| **Meta+Alt+T** | split screen: Konsole left, Helium right |
 | `voice-act` (command, no key) | speech to an allow-listed URL action, with a 5 s cancel |
 | Timer `dotfiles-sync.timer` | every 30 minutes and 2 minutes after login: copy allow-listed files, scan for secrets, commit, push; a hit blocks the push and sends a notification |
 The resume widget's pinned projects are stored as `home/.config/resume-pins.template.json` with `@HOME@` and private path names replaced by placeholders;
