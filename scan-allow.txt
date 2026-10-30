@@ -1,0 +1,4 @@
+# Extended regexes for known-benign matches (one per line) that the secret scan should ignore. Keep this short.
+himdek\.com
+himprakashd@
+ID\+LOGIN@users\.noreply\.github\.com

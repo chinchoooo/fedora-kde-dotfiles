@@ -1,0 +1,15 @@
+*.wav
+*.pyc
+__pycache__/
+venv/
+.venv/
+models/
+*.onnx
+*.bin
+*.bak
+*.bak-*
+*token*
+*.key
+kdeconnect*
+kwallet*
+.env

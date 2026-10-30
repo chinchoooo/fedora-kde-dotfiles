@@ -1,0 +1,16 @@
+# ~/.gitconfig  (fill in your own values; nothing here is real)
+[credential "https://github.com"]
+	helper =
+	helper = !/usr/bin/gh auth git-credential
+[includeIf "gitdir:~/code/"]
+	path = ~/.config/git/account-a.inc
+[includeIf "gitdir:~/work-b/"]
+	path = ~/.config/git/account-b.inc
+
+# ~/.config/git/account-a.inc
+[user]
+	name = YOUR_COMMIT_NAME
+	email = ID+LOGIN@users.noreply.github.com
+[credential "https://github.com"]
+	helper =
+	helper = !GH_TOKEN=$(gh auth token -u ACCOUNT_A) /usr/bin/gh auth git-credential
