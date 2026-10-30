@@ -36,9 +36,9 @@
     "clangd-lsp@claude-plugins-official": true
   },
   "voice": {
-    "enabled": true,
+    "enabled": false,
     "mode": "hold"
   },
   "theme": "auto",
-  "voiceEnabled": true
+  "voiceEnabled": false
 }
