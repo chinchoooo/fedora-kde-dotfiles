@@ -24,6 +24,7 @@ plus the on-device voice stack built on top of it. Private repository.
 | Input | What it does |
 |---|---|
 | Hold **Right Ctrl** (about 0.3 s or longer) | push-to-talk dictation: records, transcribes on-device, types the text into the focused window |
+| Hold **Right Shift** (about 0.3 s or longer) | voice command: records, transcribes on-device, `voice_act.py` sends only the text to Claude and opens an allowlisted action (5 s cancel) |
 | **Ctrl+Alt+Space** | toggle dictation, text goes to the clipboard (paste with Ctrl+Shift+V) |
 | **Meta+Alt+T** | split screen: Konsole left, Helium right |
 | `voice-act` (command, no key) | speech to an allow-listed URL action, with a 5 s cancel |
