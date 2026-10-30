@@ -1,2 +1,4 @@
 [Applications][org.kde.konsole]
+ShowBadges=false
+ShowInHistory=false
 ShowPopups=false
