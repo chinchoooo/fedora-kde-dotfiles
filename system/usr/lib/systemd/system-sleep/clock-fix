@@ -1,0 +1,9 @@
+#!/bin/sh
+# After resume, the kernel reads the hardware clock as UTC, but this dual-boot machine keeps it in local time (Windows convention).
+# That shifted the system clock by +5:30 after sleep. Re-read the hardware clock as local time, then let chrony confirm it.
+case "$1" in
+  post)
+    /usr/sbin/hwclock --hctosys --localtime
+    /usr/bin/chronyc -a makestep >/dev/null 2>&1 || true
+    ;;
+esac

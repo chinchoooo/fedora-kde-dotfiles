@@ -89,3 +89,4 @@
 ~/code/voice-agent/va_gui.py  voice-agent/va_gui.py
 ~/code/voice-agent/test_va_gui.py  voice-agent/test_va_gui.py
 ~/.config/systemd/user/voice-agent.socket  home/.config/systemd/user/voice-agent.socket
+~/.config/powerdevilrc  home/.config/powerdevilrc
