@@ -54,3 +54,6 @@ Make the repo public (only after re-reading the files): `gh repo edit <you>/fedo
 
 ## What is not here
 KDE Connect, KWallet, browser/Spotify/Zed data, shell history, credentials, tokens, model weights, wallpaper images, the 217 MB icon theme.
+
+## Voice output (text to speech)
+`speak "text"` uses Kokoro-82M (int8 ONNX, about 90 MB, voice `af_heart`) on the CPU with 2 threads at nice 19, so it stays light while you stream; it falls back to Piper if the Kokoro files are missing. To rebuild on a new machine: `uv venv ~/code/voice-agent/tts/venv && uv pip install --python ~/code/voice-agent/tts/venv/bin/python kokoro-onnx soundfile piper-tts`, then download `kokoro-v1.0.int8.onnx` and `voices-v1.0.bin` from the kokoro-onnx `model-files-v1.0` GitHub release into `~/code/voice-agent/tts/kokoro/`. The models are not committed. Set `SPEAK_VOICE` (for example `bf_emma`) or `SPEAK_SPEED` to change the voice.

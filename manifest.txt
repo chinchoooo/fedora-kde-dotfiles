@@ -77,3 +77,5 @@
 /etc/udev/rules.d/60-uinput-uaccess.rules  system/60-uinput-uaccess.rules
 /etc/udev/rules.d/61-voice-input-uaccess.rules  system/61-voice-input-uaccess.rules
 ~/.claude/settings.json  claude/settings.json
+~/code/voice-agent/tts/kspeak.py  voice-agent/tts/kspeak.py
+~/.local/bin/speak-piper  home/.local/bin/speak-piper
