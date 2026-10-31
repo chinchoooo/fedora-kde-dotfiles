@@ -1,0 +1,7 @@
+[AC][SuspendAndShutdown]
+AutoSuspendAction=1
+AutoSuspendIdleTimeoutSec=3600
+
+[Battery][SuspendAndShutdown]
+AutoSuspendAction=1
+AutoSuspendIdleTimeoutSec=3600
