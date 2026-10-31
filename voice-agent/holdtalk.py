@@ -14,6 +14,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 env = dict(os.environ, YDOTOOL_SOCKET=os.path.join(os.environ.get("XDG_RUNTIME_DIR", "/run/user/1000"), ".ydotool_socket"))
 FAKE_WAV = os.environ.get("HOLDTALK_FAKE_WAV")      # test hook: use this audio instead of the microphone recording
 DRY = os.environ.get("HOLDTALK_DRY")                # test hook: voice commands never open anything
+MIC = os.environ.get("HOLDTALK_MIC", "alsa_input.pci-0000_00_1f.3-platform-skl_hda_dsp_generic.HiFi__Mic1__source")   # built-in digital mic; a USB dongle must not hijack the default input
 KEEP = os.environ.get("HOLDTALK_KEEP")              # test hook: keep recordings and report their length
 
 model = None
@@ -48,6 +49,11 @@ def keyboards():
             paths.add("/dev/input/" + d.split("/")[4])
     return sorted(paths)
 
+def mic_args():
+    """Record from the built-in mic when it exists, else from the system default (a plugged-in USB DAC can silently become the default input)."""
+    out = subprocess.run(["pactl", "list", "short", "sources"], capture_output=True, text=True).stdout
+    return ["--target", MIC] if MIC and MIC in out else []
+
 def wav_seconds(path):
     w = wave.open(path)
     return w.getnframes() / float(w.getframerate())
@@ -69,7 +75,9 @@ def handle(wav, mode):
     with lock:
         try:
             if KEEP:
-                print(f"[{mode}] recorded {wav_seconds(wav):.1f}s", flush=True)
+                import array, math
+                _a = array.array("h", wave.open(wav).readframes(wave.open(wav).getnframes()))
+                print(f"[{mode}] recorded {wav_seconds(wav):.1f}s rms={math.sqrt(sum(x*x for x in _a)/max(1,len(_a))):.0f}", flush=True)
             if FAKE_WAV:
                 shutil.copy(FAKE_WAV, wav)
             text = transcribe(wav)
@@ -129,7 +137,7 @@ def main():
                 if code in KEYS:
                     if val == 1 and rec is None:
                         wav = tempfile.mktemp(suffix=".wav", prefix="holdtalk-")
-                        rec = subprocess.Popen(["pw-record", "--rate", "16000", "--channels", "1", "--format", "s16", wav])
+                        rec = subprocess.Popen(["pw-record"] + mic_args() + ["--rate", "16000", "--channels", "1", "--format", "s16", wav])
                         mode = KEYS[code]; t0 = time.monotonic(); shown = False
                     elif val == 0 and rec is not None and KEYS[code] == mode:
                         stop(discard=False)
