@@ -25,6 +25,16 @@
           }
         ]
       }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.local/bin/speak-reply"
+          }
+        ]
+      }
     ]
   },
   "enabledPlugins": {

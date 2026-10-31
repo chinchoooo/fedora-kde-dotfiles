@@ -1,0 +1,45 @@
+#!/usr/bin/env python3
+"""Claude Code Stop hook: speaks the assistant's final reply on-device (Kokoro af_heart via `speak`).
+Reads the hook JSON on stdin, finds the last assistant message in the transcript, strips markdown/code/links,
+speaks the first ~420 characters (cut at a sentence end) and says the rest is on screen when it was cut."""
+import json, os, re, subprocess, sys
+
+try:
+    data = json.load(sys.stdin)
+    path = data.get("transcript_path", "")
+    last = ""
+    with open(path, encoding="utf-8") as f:
+        for line in f:
+            try:
+                d = json.loads(line)
+            except ValueError:
+                continue
+            m = d.get("message") if isinstance(d.get("message"), dict) else None
+            if d.get("type") == "assistant" and m:
+                c = m.get("content")
+                t = c if isinstance(c, str) else "\n".join(b.get("text", "") for b in (c or []) if isinstance(b, dict) and b.get("type") == "text")
+                if t.strip():
+                    last = t
+    if not last:
+        sys.exit(0)
+    t = re.sub(r"```.*?```", " ", last, flags=re.S)                  # code blocks
+    t = re.sub(r"`([^`]*)`", r"\1", t)                               # inline code
+    t = re.sub(r"\[([^\]]*)\]\([^)]*\)", r"\1", t)                   # links -> label
+    t = re.sub(r"https?://\S+", " ", t)
+    t = re.sub(r"^\s*\|.*\|\s*$", " ", t, flags=re.M)                # tables
+    t = re.sub(r"^\s*(#+|[-*>]|\d+\.)\s*", "", t, flags=re.M)        # headings, bullets
+    t = re.sub(r"[*_~]+", "", t)
+    t = re.sub(r"\s+", " ", t).strip()
+    if not t:
+        sys.exit(0)
+    LIM = 420
+    cut = len(t) > LIM
+    if cut:
+        part = t[:LIM]
+        k = max(part.rfind(". "), part.rfind("? "), part.rfind("! "))
+        t = part[: k + 1] if k > 120 else part.rsplit(" ", 1)[0] + "."
+        t += " The rest is on screen."
+    subprocess.run(["pkill", "-f", "kspeak.py"], capture_output=True)    # never overlap an earlier reply
+    subprocess.Popen([os.path.expanduser("~/.local/bin/speak"), t], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+except Exception:
+    pass
