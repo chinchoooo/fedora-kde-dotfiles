@@ -79,3 +79,13 @@
 ~/.claude/settings.json  claude/settings.json
 ~/code/voice-agent/tts/kspeak.py  voice-agent/tts/kspeak.py
 ~/.local/bin/speak-piper  home/.local/bin/speak-piper
+~/.local/bin/speak-reply  home/.local/bin/speak-reply
+~/code/voice-agent/voice_agent.py  voice-agent/voice_agent.py
+~/code/voice-agent/va-act  voice-agent/va-act
+~/code/voice-agent/agent/CLAUDE.md  voice-agent/agent/CLAUDE.md
+~/code/voice-agent/agent/settings.json  voice-agent/agent/settings.json
+~/code/voice-agent/agent/va-guard  voice-agent/agent/va-guard
+~/.config/systemd/user/voice-agent.service  home/.config/systemd/user/voice-agent.service
+~/code/voice-agent/va_gui.py  voice-agent/va_gui.py
+~/code/voice-agent/test_va_gui.py  voice-agent/test_va_gui.py
+~/.config/systemd/user/voice-agent.socket  home/.config/systemd/user/voice-agent.socket
