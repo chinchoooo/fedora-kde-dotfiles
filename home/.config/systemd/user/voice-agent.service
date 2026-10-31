@@ -3,6 +3,7 @@ Description=Voice agent (persistent Haiku assistant for Right Shift commands)
 After=pipewire.service
 
 [Service]
+MemoryMax=900M
 ExecStart=%h/code/voice-agent/tts/venv/bin/python %h/code/voice-agent/voice_agent.py
 Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
 Environment=PYTHONUNBUFFERED=1

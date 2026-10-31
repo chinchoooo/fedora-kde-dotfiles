@@ -3,6 +3,7 @@ Description=Hold Right Ctrl to dictate (on-device)
 After=ydotoold.service
 
 [Service]
+MemoryMax=1200M
 ExecStart=%h/code/voice-agent/venv/bin/python %h/code/voice-agent/holdtalk.py
 Restart=on-failure
 Nice=10

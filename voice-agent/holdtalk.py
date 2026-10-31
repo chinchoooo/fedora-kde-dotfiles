@@ -40,10 +40,36 @@ def agent_send(line, wait=60.0):
     return True
 
 model = None
-def load():
+model_lock = threading.Lock()
+last_use = time.monotonic()
+IDLE_UNLOAD = int(os.environ.get("HOLDTALK_IDLE_UNLOAD", "1200"))   # seconds idle before the Whisper model is freed (about 550 MB); 20 min so normal use never waits
+
+def ensure_model():
+    """Load Whisper on demand (a key press pre-warms it while you speak)."""
+    global model, last_use
+    with model_lock:
+        last_use = time.monotonic()
+        if model is None:
+            from faster_whisper import WhisperModel
+            model = WhisperModel("small.en", device="cpu", compute_type="int8", cpu_threads=4, download_root=os.path.join(HERE, "models"))
+        return model
+
+def unloader():
+    """Free the model after a quiet spell so the idle service stays small."""
     global model
-    from faster_whisper import WhisperModel
-    model = WhisperModel("small.en", device="cpu", compute_type="int8", cpu_threads=4, download_root=os.path.join(HERE, "models"))
+    import ctypes, gc
+    while True:
+        time.sleep(30)
+        with model_lock:
+            if model is not None and time.monotonic() - last_use > IDLE_UNLOAD and rec_active is False:
+                model = None
+                gc.collect()
+                try:
+                    ctypes.CDLL("libc.so.6").malloc_trim(0)
+                except OSError:
+                    pass
+
+rec_active = False
 
 nid = 0
 def notify(msg, t=1200):
@@ -86,10 +112,12 @@ def transcribe(wav):
     a = np.frombuffer(w.readframes(w.getnframes()), np.int16).astype(np.float32) / 32768.0
     if len(a) < 16000 * HOLD_MIN:
         return ""
-    while model is None:
-        time.sleep(0.2)
-    segs, _ = model.transcribe(a, vad_filter=True, beam_size=1)
-    return " ".join(s.text.strip() for s in segs).strip()
+    global last_use
+    m = ensure_model()
+    segs, _ = m.transcribe(a, vad_filter=True, beam_size=1)
+    text = " ".join(s.text.strip() for s in segs).strip()
+    last_use = time.monotonic()
+    return text
 
 lock = threading.Lock()   # one transcription at a time, in the order spoken
 
@@ -129,7 +157,7 @@ def handle(wav, mode):
             close_notification()
 
 def main():
-    threading.Thread(target=load, daemon=True).start()
+    threading.Thread(target=unloader, daemon=True).start()
     sel = selectors.DefaultSelector()
     for p in keyboards():
         try:
@@ -164,6 +192,7 @@ def main():
                         wav = tempfile.mktemp(suffix=".wav", prefix="holdtalk-")
                         rec = subprocess.Popen(["pw-record"] + mic_args() + ["--rate", "16000", "--channels", "1", "--format", "s16", wav])
                         mode = KEYS[code]; t0 = time.monotonic(); shown = False
+                        threading.Thread(target=ensure_model, daemon=True).start()   # pre-warm while you speak
                     elif val == 0 and rec is not None and KEYS[code] == mode:
                         stop(discard=False)
                     elif val == 1 and rec is not None and KEYS[code] != mode:
