@@ -1,5 +1,8 @@
 #!/bin/bash
-# On-device text-to-speech with Piper; usage: speak "text"  (or pipe text in)
+# On-device speech: Kokoro-82M (int8) at low priority; falls back to Piper if Kokoro is unavailable. usage: speak "text" (or pipe text in)
 D=$HOME/code/voice-agent/tts
 T="${*:-$(cat)}"
-printf '%s' "$T" | "$D/venv/bin/python" -m piper -m "$D/voices/en_US-lessac-medium.onnx" -f /tmp/speak-$$.wav >/dev/null 2>&1 && pw-play /tmp/speak-$$.wav; rm -f /tmp/speak-$$.wav
+if [ -f "$D/kokoro/kokoro-v1.0.int8.onnx" ]; then
+  printf '%s' "$T" | nice -n 19 "$D/venv/bin/python" "$D/kspeak.py" && exit 0
+fi
+exec "$HOME/.local/bin/speak-piper" "$T"
