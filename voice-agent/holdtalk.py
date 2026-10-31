@@ -1,10 +1,11 @@
 """Hold-to-talk, fully on-device. Two hold keys:
   Right Ctrl  = dictation: record while held; on release local Whisper transcribes and ydotool types the text.
-  Right Shift = voice command: record while held; on release local Whisper transcribes and voice_act.py runs the action
+  Right Shift = voice command: record while held; on release local Whisper transcribes and the transcript goes to the voice-agent daemon
+                (voice_agent.py, persistent Haiku session; falls back to the one-shot voice_act.py if the daemon is down)
                 (only the transcript text goes to Claude; audio never leaves the machine).
 Raw key events are read from /dev/input only to watch those two keys; nothing is logged or stored.
 Taps under 0.3 s and chords (another key pressed while held) are ignored, so normal Ctrl/Shift shortcuts keep working."""
-import glob, os, selectors, shutil, struct, subprocess, tempfile, threading, time, wave
+import glob, os, selectors, shutil, socket, struct, subprocess, tempfile, threading, time, wave
 import numpy as np
 
 KEYS = {97: "dictate", 54: "command"}      # KEY_RIGHTCTRL, KEY_RIGHTSHIFT (change here)
@@ -16,6 +17,27 @@ FAKE_WAV = os.environ.get("HOLDTALK_FAKE_WAV")      # test hook: use this audio 
 DRY = os.environ.get("HOLDTALK_DRY")                # test hook: voice commands never open anything
 MIC = os.environ.get("HOLDTALK_MIC", "alsa_input.pci-0000_00_1f.3-platform-skl_hda_dsp_generic.HiFi__Mic1__source")   # built-in digital mic; a USB dongle must not hijack the default input
 KEEP = os.environ.get("HOLDTALK_KEEP")              # test hook: keep recordings and report their length
+
+AGENT_SOCK = os.path.join(os.environ.get("XDG_RUNTIME_DIR", "/run/user/1000"), "voice-agent.sock")
+NO_AGENT = os.environ.get("HOLDTALK_NO_AGENT")      # test hook: skip the daemon, use the one-shot voice_act.py
+
+def agent_send(line, wait=60.0):
+    """Send one line to the voice-agent daemon and wait until it starts speaking (or finishes), so the popup closes then.
+    Returns False if the daemon is not reachable (caller falls back to voice_act.py)."""
+    try:
+        s = socket.socket(socket.AF_UNIX); s.settimeout(3)
+        s.connect(AGENT_SOCK)
+        s.sendall((line.replace("\n", " ") + "\n").encode())
+    except OSError:
+        return False
+    if wait:
+        s.settimeout(wait)
+        try:
+            s.recv(64)                      # 'speaking' or 'done'
+        except OSError:
+            pass
+    s.close()
+    return True
 
 model = None
 def load():
@@ -88,7 +110,10 @@ def handle(wav, mode):
             if mode == "dictate":
                 if not KEEP:
                     subprocess.run(["ydotool", "type", "--key-delay", "2", "--", text + " "], env=env)
-            else:
+            elif not NO_AGENT and not DRY and agent_send(text):
+                if KEEP:
+                    print(f"[{mode}] sent to voice-agent daemon", flush=True)
+            else:                                        # daemon down: one-shot fallback
                 cmd = ["nice", "-n", "10", os.path.join(HERE, "venv/bin/python"), os.path.join(HERE, "voice_act.py"), "--text", text]
                 if DRY:
                     cmd.append("--dry-run")
@@ -147,6 +172,8 @@ def main():
                     stop(discard=True)
         if rec is not None and not shown and time.monotonic() - t0 >= HOLD_MIN:
             notify("Listening..." if mode == "dictate" else "Listening for a command...", 60000); shown = True
+            if mode == "command" and not NO_AGENT:
+                threading.Thread(target=agent_send, args=("\x00warm", 0), daemon=True).start()   # start the agent while the user speaks
 
 if __name__ == "__main__":
     main()
