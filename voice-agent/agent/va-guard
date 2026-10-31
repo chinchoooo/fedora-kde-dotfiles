@@ -1,0 +1,29 @@
+#!/usr/bin/python3
+"""PreToolUse hook for the voice agent (only loaded through agent/settings.json). Second lock beside the permission rules:
+a Bash command is allowed ONLY if it is a single `va-act <args>` with no shell operators, substitution or redirection."""
+import json, shlex, sys
+
+def ok(cmd):
+    if "\n" in cmd or "\r" in cmd or "\x00" in cmd or "`" in cmd or "$" in cmd or "\\" in cmd:
+        return False
+    q = None
+    for ch in cmd:                                   # operators are only allowed inside quotes
+        if q:
+            if ch == q:
+                q = None
+        elif ch in "'\"":
+            q = ch
+        elif ch in ";&|<>(){}*?~!#":
+            return False
+    if q:
+        return False
+    try:
+        t = shlex.split(cmd)
+    except ValueError:
+        return False
+    return len(t) >= 2 and t[0] == "va-act" and not t[1].startswith("-")
+
+d = json.load(sys.stdin)
+if d.get("tool_name") == "Bash" and not ok(d.get("tool_input", {}).get("command", "")):
+    print(json.dumps({"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny",
+          "permissionDecisionReason": "Only a single plain `va-act <subcommand>` command is allowed."}}))

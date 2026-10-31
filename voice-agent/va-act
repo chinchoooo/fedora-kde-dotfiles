@@ -1,0 +1,264 @@
+#!/usr/bin/python3
+"""va-act: the ONLY command the voice agent may run. Every subcommand validates its arguments.
+Deliberately absent: deleting, installing, arbitrary commands, typing/clicking, sending messages, system settings.
+Add a subcommand: write cmd_<name>(args), register it in COMMANDS below, document it in README.md (and the agent/CLAUDE.md list)."""
+import argparse, glob, json, os, re, subprocess, sys, time
+from urllib.parse import quote_plus, urlparse
+
+HERE = os.path.dirname(os.path.realpath(__file__))
+SHOTS = os.path.expanduser("~/.cache/va-shots")
+SPEAK = os.path.expanduser("~/.local/bin/speak")
+SINK = "@DEFAULT_AUDIO_SINK@"
+DEVNULL = subprocess.DEVNULL
+
+
+def run(cmd, timeout=15):
+    return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout).stdout.strip()
+
+
+def detach(cmd):
+    subprocess.Popen(cmd, stdout=DEVNULL, stderr=DEVNULL, stdin=DEVNULL, start_new_session=True)
+
+
+def fail(msg, code=2):
+    print("error: " + msg)
+    sys.exit(code)
+
+
+def http_url(u):
+    u = u.strip()
+    p = urlparse(u)
+    if p.scheme not in ("http", "https") or not p.hostname or any(c in u for c in " \n\r\t\x00") or len(u) > 2000:
+        fail("only a single http or https link can be opened")
+    return u
+
+
+def cmd_open_url(a):
+    u = http_url(a.url)
+    detach(["xdg-open", u])
+    print("opened " + (urlparse(u).hostname or ""))
+
+
+def cmd_search(a):
+    q = " ".join(a.query).strip()
+    if not q or len(q) > 300:
+        fail("empty or too long search")
+    detach(["xdg-open", "https://www.google.com/search?q=" + quote_plus(q)])
+    print("searching for " + q)
+
+
+def cmd_launch_app(a):
+    sys.path.insert(0, HERE)
+    from voice_act import find_app          # reuse: installed, visible .desktop apps only
+    name = " ".join(a.name).strip()
+    f = find_app(name) if name else None
+    if not f:
+        fail("no installed app called " + name)
+    detach(["gio", "launch", f])
+    print("launched " + os.path.basename(f))
+
+
+MPRIS = {"play": "Play", "pause": "Pause", "toggle": "PlayPause", "next": "Next", "previous": "Previous", "stop": "Stop"}
+
+
+def players():
+    out = run(["busctl", "--user", "list", "--no-legend"])
+    return [l.split()[0] for l in out.splitlines() if l.startswith("org.mpris.MediaPlayer2.")]
+
+
+def pick_player():
+    ps = players()
+    for p in ps:                                 # prefer one that is playing
+        if "Playing" in run(["busctl", "--user", "get-property", p, "/org/mpris/MediaPlayer2", "org.mpris.MediaPlayer2.Player", "PlaybackStatus"]):
+            return p
+    return ps[0] if ps else None
+
+
+def cmd_media(a):
+    p = pick_player()
+    if not p:
+        fail("no media player is running")
+    subprocess.run(["busctl", "--user", "call", p, "/org/mpris/MediaPlayer2", "org.mpris.MediaPlayer2.Player", MPRIS[a.action]],
+                   capture_output=True, timeout=10)
+    print("media " + a.action + " sent to " + p.replace("org.mpris.MediaPlayer2.", ""))
+
+
+def cmd_now_playing(a):
+    p = pick_player()
+    if not p:
+        print("nothing is playing (no media player running)")
+        return
+    st = re.sub(r'^s "|"$', "", run(["busctl", "--user", "get-property", p, "/org/mpris/MediaPlayer2", "org.mpris.MediaPlayer2.Player", "PlaybackStatus"]))
+    out = run(["busctl", "--user", "--json=short", "get-property", p, "/org/mpris/MediaPlayer2", "org.mpris.MediaPlayer2.Player", "Metadata"])
+    try:
+        md = json.loads(out)["data"]
+        g = lambda k: (md.get(k) or {}).get("data")
+        title, artist = g("xesam:title"), g("xesam:artist")
+        print(f"{st}: {title} by {', '.join(artist) if artist else 'unknown artist'} ({p.replace('org.mpris.MediaPlayer2.', '')})")
+    except Exception:
+        print(f"{st}: unknown track ({p})")
+
+
+def cmd_volume(a):
+    v = a.value.lower()
+    if v == "up":
+        run(["wpctl", "set-volume", "-l", "1.0", SINK, "5%+"])
+    elif v == "down":
+        run(["wpctl", "set-volume", SINK, "5%-"])
+    elif v in ("mute", "unmute"):
+        run(["wpctl", "set-mute", SINK, "1" if v == "mute" else "0"])
+    elif v.isdigit() and 0 <= int(v) <= 100:
+        run(["wpctl", "set-volume", SINK, f"{int(v)}%"])
+    else:
+        fail("volume must be up, down, mute, unmute or 0-100")
+    cmd_get_volume(a)
+
+
+def cmd_get_volume(a):
+    print(run(["wpctl", "get-volume", SINK]))
+
+
+def cmd_brightness(a):
+    v = a.value.lower()
+    if v == "up":
+        arg = "+10%"
+    elif v == "down":
+        arg = "10%-"
+    elif v.isdigit() and 1 <= int(v) <= 100:
+        arg = f"{int(v)}%"
+    else:
+        fail("brightness must be up, down or 1-100")
+    run(["brightnessctl", "-q", "set", arg])
+    cur, mx = run(["brightnessctl", "get"]), run(["brightnessctl", "max"])
+    print(f"brightness {round(100 * int(cur) / int(mx))}%")
+
+
+def cmd_screenshot(a):
+    os.makedirs(SHOTS, mode=0o700, exist_ok=True)
+    for f in glob.glob(SHOTS + "/*.png"):      # keep the directory tidy: drop shots older than 1 hour
+        if time.time() - os.path.getmtime(f) > 3600:
+            os.unlink(f)
+    path = f"{SHOTS}/shot-{int(time.time())}.png"
+    subprocess.run(["spectacle", "-b", "-n", "-f", "-o", path], capture_output=True, timeout=30)
+    if not os.path.exists(path):
+        fail("screenshot failed")
+    print(path)
+
+
+def cmd_notify(a):
+    t = " ".join(a.text).strip()[:500]
+    if not t:
+        fail("empty text")
+    run(["notify-send", "-t", "8000", "Voice assistant", "--", t])
+    print("notified")
+
+
+def cmd_speak(a):
+    t = " ".join(a.text).strip()[:600]
+    if not t:
+        fail("empty text")
+    subprocess.run([SPEAK, t], stdout=DEVNULL, stderr=DEVNULL, timeout=120)
+    print("spoken")
+
+
+def cmd_tile_split(a):
+    detach([os.path.expanduser("~/.local/bin/tile-split")])
+    print("tiled terminal left, browser right")
+
+
+def cmd_time(a):
+    print(time.strftime("%A %d %B %Y, %H:%M"))
+
+
+WIN_JS = ('var o=[];workspace.windowList().forEach(function(w){if(w.normalWindow)o.push(w.caption);});'
+          'callDBus("org.va.Windows","/","org.va.Windows","Report",JSON.stringify(o));')
+
+
+def cmd_windows(a):
+    import dbus, dbus.service, dbus.mainloop.glib, tempfile
+    from gi.repository import GLib
+    dbus.mainloop.glib.DBusGMainLoop(set_as_default=True)
+    bus = dbus.SessionBus()
+    got = []
+    loop = GLib.MainLoop()
+
+    class R(dbus.service.Object):
+        @dbus.service.method("org.va.Windows", in_signature="s")
+        def Report(self, s):
+            got.append(s)
+            loop.quit()
+
+    name = dbus.service.BusName("org.va.Windows", bus)
+    R(bus, "/")
+    js = tempfile.NamedTemporaryFile("w", suffix=".js", delete=False)
+    js.write(WIN_JS); js.close()
+    def kcall(path, iface, method, sig="", *args):
+        return bus.call_blocking("org.kde.KWin", path, iface, method, sig, args)
+    k = lambda m, sig, *args: kcall("/Scripting", "org.kde.kwin.Scripting", m, sig, *args)
+    try:
+        k("unloadScript", "s", "vawindows")
+        sid = k("loadScript", "ss", js.name, "vawindows")
+        kcall(f"/Scripting/Script{sid}", "org.kde.kwin.Script", "run")
+        GLib.timeout_add(4000, loop.quit)
+        loop.run()
+    finally:
+        try:
+            k("unloadScript", "s", "vawindows")
+        except Exception:
+            pass
+        os.unlink(js.name)
+    if not got:
+        fail("could not read the window list")
+    for t in json.loads(got[0]):
+        print("- " + t[:120])
+
+
+def cmd_battery(a):
+    out = []
+    for d in sorted(glob.glob("/sys/class/power_supply/BAT*")):
+        rd = lambda n: open(f"{d}/{n}").read().strip()
+        out.append(f"{os.path.basename(d)}: {rd('capacity')}% {rd('status').lower()}")
+    print("; ".join(out) or "no battery found")
+
+
+def cmd_wifi_status(a):
+    print(run(["nmcli", "-t", "-f", "TYPE,STATE,CONNECTION", "device"]) or "no network info")
+
+
+COMMANDS = {}
+
+
+def build():
+    ap = argparse.ArgumentParser(prog="va-act", description=__doc__)
+    sp = ap.add_subparsers(dest="cmd", required=True)
+
+    def add(name, fn, *args, **kw):
+        p = sp.add_parser(name)
+        for n, kwargs in args:
+            p.add_argument(n, **kwargs)
+        p.set_defaults(fn=fn)
+    add("open-url", cmd_open_url, ("url", {}))
+    add("search", cmd_search, ("query", {"nargs": "+"}))
+    add("launch-app", cmd_launch_app, ("name", {"nargs": "+"}))
+    add("media", cmd_media, ("action", {"choices": list(MPRIS)}))
+    add("now-playing", cmd_now_playing)
+    add("volume", cmd_volume, ("value", {}))
+    add("get-volume", cmd_get_volume)
+    add("brightness", cmd_brightness, ("value", {}))
+    add("screenshot", cmd_screenshot)
+    add("notify", cmd_notify, ("text", {"nargs": "+"}))
+    add("speak", cmd_speak, ("text", {"nargs": "+"}))
+    add("tile-split", cmd_tile_split)
+    add("time", cmd_time)
+    add("windows", cmd_windows)
+    add("battery", cmd_battery)
+    add("wifi-status", cmd_wifi_status)
+    return ap
+
+
+if __name__ == "__main__":
+    a = build().parse_args()
+    try:
+        a.fn(a)
+    except subprocess.TimeoutExpired:
+        fail("timed out")
