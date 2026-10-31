@@ -1,0 +1,9 @@
+[Unit]
+Description=Voice agent socket (wakes the agent on the first Right Shift hold)
+
+[Socket]
+ListenStream=%t/voice-agent.sock
+SocketMode=0600
+
+[Install]
+WantedBy=sockets.target

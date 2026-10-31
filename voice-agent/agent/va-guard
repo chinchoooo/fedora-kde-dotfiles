@@ -23,7 +23,43 @@ def ok(cmd):
         return False
     return len(t) >= 2 and t[0] == "va-act" and not t[1].startswith("-")
 
+import os
+WS = os.path.expanduser("~/va-workspace")
+BAD_EXT = {".sh", ".bash", ".zsh", ".fish", ".py", ".pl", ".rb", ".desktop", ".service", ".timer", ".appimage", ".bin", ".run", ".exe", ".bat",
+           ".jar", ".so", ".ko", ".rc", ".profile", ".bashrc", ".zshrc", ".kcfgc", ".autostart", ".lnk", ".command"}
+
+ARMED = os.path.expanduser("~/.cache/voice-agent/armed")
+
+def armed():
+    import time
+    try:
+        st = os.stat(ARMED)
+        age = time.time() - float(open(ARMED).read().strip())
+        return st.st_uid == os.getuid() and not st.st_mode & 0o022 and -5 <= age <= 180 and -5 <= time.time() - st.st_mtime <= 180
+    except (OSError, ValueError):
+        return False
+
+def file_ok(path):
+    """Write/Edit only inside ~/va-workspace (after resolving symlinks), never scripts/launchers, <= 200 KB."""
+    if not path or "\x00" in path:
+        return False
+    rp = os.path.realpath(os.path.expanduser(path))
+    if not (rp == WS or rp.startswith(WS + os.sep)):
+        return False
+    base = os.path.basename(rp).lower()
+    return os.path.splitext(base)[1] not in BAD_EXT and not base.startswith(".")
+
+def deny(why):
+    print(json.dumps({"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny", "permissionDecisionReason": why}}))
+
 d = json.load(sys.stdin)
-if d.get("tool_name") == "Bash" and not ok(d.get("tool_input", {}).get("command", "")):
-    print(json.dumps({"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny",
-          "permissionDecisionReason": "Only a single plain `va-act <subcommand>` command is allowed."}}))
+name, inp = d.get("tool_name"), d.get("tool_input", {})
+if name == "Bash" and not ok(inp.get("command", "")):
+    deny("Only a single plain `va-act <subcommand>` command is allowed.")
+elif name in ("Write", "Edit"):
+    if not armed():
+        deny("Not armed: the user must hold Right Shift and speak first. File writing is off until then.")
+    elif not file_ok(inp.get("file_path", "")):
+        deny("Files may only be created inside ~/va-workspace, and never scripts or launchers.")
+    elif len(inp.get("content", "") or inp.get("new_string", "")) > 200000:
+        deny("File too large.")

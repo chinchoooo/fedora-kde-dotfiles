@@ -20,11 +20,27 @@ SPEED = 1.05
 MAX_CHARS, MAX_SENT = 320, 3
 SHOTS = os.path.expanduser("~/.cache/va-shots")
 
-ALLOWED = ["Bash(va-act:*)", f"Read(/{SHOTS}/**)", "WebSearch", "WebFetch"]       # Read path is absolute: leading //
+WORKSPACE = os.path.expanduser("~/va-workspace")             # the ONLY place the agent may create files
+os.makedirs(WORKSPACE, exist_ok=True)
+RUNDIR = os.environ.get("XDG_RUNTIME_DIR", "/run/user/1000")
+GUI_STATE = os.path.join(RUNDIR, "va-gui.json")              # per-command GUI action counter (reset on every prompt)
+PANIC = os.path.join(RUNDIR, "va-panic")                     # while this exists every GUI subcommand refuses
+ARMED = os.path.expanduser("~/.cache/voice-agent/armed")     # written ONLY by holdtalk.py after a real Right Shift hold
+UP_FLAG = os.path.join(RUNDIR, "voice-agent.up")             # exists while this daemon runs (holdtalk only probes it then)
+IDLE_EXIT = float(os.environ.get("VA_IDLE_EXIT", "180"))     # seconds with no command and no work -> the whole daemon exits (true sleep)
+
+def disarm():
+    try:
+        os.unlink(ARMED)
+    except OSError:
+        pass
+
+ALLOWED = ["Bash(va-act:*)", f"Read(/{SHOTS}/**)", f"Read(/{WORKSPACE}/**)", f"Write(/{WORKSPACE}/**)", f"Edit(/{WORKSPACE}/**)",
+           "WebSearch", "WebFetch"]       # paths are absolute: leading //
 DENIED = ["Bash(rm:*)", "Bash(sudo:*)", "Bash(pkexec:*)", "Bash(dnf:*)", "Bash(mv:*)", "Bash(dd:*)", "Bash(curl:*)",
           "Bash(wget:*)", "Bash(ydotool:*)", "Bash(systemctl:*)", "Bash(bash:*)", "Bash(sh:*)", "Bash(python:*)", "Bash(python3:*)",
-          "Bash(ssh:*)", "Bash(git:*)", "Edit", "Write", "NotebookEdit", "Agent", "Task", "TodoWrite", "KillShell", "Monitor",
-          "Read(~/.ssh/**)", "Read(~/.config/**)", "Read(~/.claude/**)", "Read(/etc/**)"]
+          "Bash(ssh:*)", "Bash(git:*)", "NotebookEdit", "Agent", "Task", "TodoWrite", "KillShell", "Monitor",
+          "Write(~/.cache/voice-agent/**)", "Edit(~/.cache/voice-agent/**)", "Read(~/.cache/voice-agent/**)", "Read(~/.ssh/**)", "Read(~/.config/**)", "Read(~/.claude/**)", "Read(/etc/**)"]
 
 def log(*a):
     print(*a, flush=True)
@@ -33,8 +49,24 @@ def child_cmd():
     return ["claude", "-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose",
             "--model", MODEL, "--setting-sources", "project", "--settings", os.path.join(AGENT_DIR, "settings.json"),
             "--strict-mcp-config", "--disable-slash-commands", "--no-session-persistence",
-            "--tools", "Bash,Read,WebSearch,WebFetch", "--permission-mode", "dontAsk",
+            "--tools", "Bash,Read,Write,Edit,WebSearch,WebFetch", "--permission-mode", "dontAsk",
             "--allowedTools", *ALLOWED, "--disallowedTools", *DENIED]
+
+def descendants(root):
+    """All descendant pids of `root` (read from /proc)."""
+    kids = {}
+    for d in os.listdir("/proc"):
+        if d.isdigit():
+            try:
+                st = open(f"/proc/{d}/stat").read()
+                kids.setdefault(int(st.rsplit(")", 1)[1].split()[1]), []).append(int(d))
+            except (OSError, ValueError, IndexError):
+                pass
+    out, todo = [], [root]
+    while todo:
+        for c in kids.get(todo.pop(), []):
+            out.append(c); todo.append(c)
+    return out
 
 def clean(text):
     t = re.sub(r"```.*?```", " ", text, flags=re.S)
@@ -61,11 +93,14 @@ class Speaker:
         self.last = time.monotonic()
         self.proc = None
         self.on_start = None            # callback fired when speech playback begins
+        self.gen = 0                    # bumped by stop(): abandons the sentence loop of the text being spoken
+        self.active = False
 
     def say(self, text):
         self.q.put_nowait(text)
 
     def stop(self):
+        self.gen += 1
         while not self.q.empty():
             self.q.get_nowait()
         if self.proc and self.proc.returncode is None:
@@ -100,6 +135,8 @@ class Speaker:
         loop = asyncio.get_running_loop()
         while True:
             text = await self.q.get()
+            self.active = True
+            gen = self.gen
             sents = [s for s in re.split(r"(?<=[.!?])\s+", text) if s.strip()]
             nxt = loop.run_in_executor(None, self._synth, sents[0]) if sents else None
             for i in range(len(sents)):
@@ -107,11 +144,14 @@ class Speaker:
                     f = await nxt
                 except Exception as e:
                     log("tts error", e); break
+                if gen != self.gen:
+                    break
                 nxt = loop.run_in_executor(None, self._synth, sents[i + 1]) if i + 1 < len(sents) else None   # synth next while playing this
                 if self.on_start:
                     self.on_start(); 
                 await self._play(f)
             self.last = time.monotonic()
+            self.active = False
 
     async def reaper(self):
         while True:
@@ -132,6 +172,7 @@ class Agent:
         self.prompts = 0
         self.last_prompt = time.monotonic()
         self.model = None
+        self.activity = time.monotonic()    # last command / warm-up / turn end (idle exit clock)
         self.turn_waiters = []          # per in-flight prompt: [writer, spoken_flag]
         self.lock = asyncio.Lock()
         self.reader = None
@@ -216,7 +257,30 @@ class Agent:
                 self.sp.say("Sorry, I hit a problem. Please try again.")
             self._finish_all()
 
+    def busy(self):
+        return bool(self.turn_waiters) or self.sp.active or not self.sp.q.empty()
+
+    async def panic(self):
+        """PANIC STOP: refuse further GUI actions, kill the running va-act children and the agent turn, speak 'Stopped.'."""
+        open(PANIC, "w").close()
+        if self.proc and self.proc.returncode is None:
+            for pid in descendants(self.proc.pid):
+                try:
+                    os.kill(pid, signal.SIGKILL)
+                except OSError:
+                    pass
+        disarm()
+        self.sp.stop()
+        await self.stop("panic stop")           # the next command starts a fresh session (the in-flight turn is gone)
+        self.sp.say("Stopped.")
+        log("PANIC STOP")
+
     async def prompt(self, text, writer):
+        for f in (PANIC, GUI_STATE):            # a new user command: lift the panic flag and reset the GUI rate limit
+            try:
+                os.unlink(f)
+            except OSError:
+                pass
         async with self.lock:
             if self.prompts >= ROTATE_PROMPTS:
                 await self.stop("rotated after %d prompts" % self.prompts)
@@ -231,9 +295,20 @@ class Agent:
 
     async def reaper(self):
         while True:
-            await asyncio.sleep(60)
-            if self.proc and not self.turn_waiters and time.monotonic() - self.last_prompt > ROTATE_IDLE:
-                await self.stop("idle %ds" % ROTATE_IDLE)
+            await asyncio.sleep(15)
+            if self.busy():
+                self.activity = time.monotonic()
+            elif time.monotonic() - self.activity > IDLE_EXIT:
+                log("idle for %ds: exiting (socket activation wakes me on the next hold)" % IDLE_EXIT)
+                disarm()
+                await self.stop("idle exit")
+                self.sp.stop()
+                for f in (UP_FLAG,):
+                    try:
+                        os.unlink(f)
+                    except OSError:
+                        pass
+                os._exit(0)                      # nothing left running: no daemon, no claude child, no Kokoro
 
 async def main():
     sp = Speaker(); ag = Agent(sp)
@@ -246,6 +321,7 @@ async def main():
                 if not line:
                     break
                 text = line.decode(errors="replace").strip()
+                ag.activity = time.monotonic()
                 if text == "\x00warm":
                     await ag.start()
                     continue
@@ -253,6 +329,12 @@ async def main():
                     w.write((json.dumps({"model": ag.model, "prompts": ag.prompts, "pid": ag.proc.pid if ag.proc else None,
                                          "kokoro": sp.k is not None}) + "\n").encode())
                     await w.drain(); continue
+                if text == "\x00busy":
+                    w.write(b"1\n" if ag.busy() else b"0\n")
+                    await w.drain(); continue
+                if text == "\x00stop":
+                    await ag.panic()
+                    w.write(b"done\n"); await w.drain(); continue
                 if not text:
                     continue
                 sp.stop()                                  # a new command interrupts speech in progress
@@ -271,11 +353,18 @@ async def main():
         while not ws[1]:
             await asyncio.sleep(0.2)
 
-    if os.path.exists(SOCK):
-        os.unlink(SOCK)
-    srv = await asyncio.start_unix_server(client, SOCK)
-    os.chmod(SOCK, 0o600)
-    log("listening", SOCK)
+    activated = os.environ.get("LISTEN_PID") == str(os.getpid()) and os.environ.get("LISTEN_FDS") == "1"
+    if activated:                                   # systemd socket activation: fd 3 is the listening socket (voice-agent.socket)
+        import socket
+        srv = await asyncio.start_unix_server(client, sock=socket.socket(fileno=3))
+        log("listening on activated socket")
+    else:                                           # plain fallback when started by hand
+        if os.path.exists(SOCK):
+            os.unlink(SOCK)
+        srv = await asyncio.start_unix_server(client, SOCK)
+        os.chmod(SOCK, 0o600)
+        log("listening", SOCK)
+    open(UP_FLAG, "w").close()
     asyncio.get_running_loop().add_signal_handler(signal.SIGTERM, lambda: sys.exit(0))
     async with srv:
         await srv.serve_forever()
@@ -283,7 +372,9 @@ async def main():
 try:
     asyncio.run(main())
 finally:
-    try:
-        os.unlink(SOCK)
-    except OSError:
-        pass
+    for f in (UP_FLAG,) + (() if os.environ.get("LISTEN_FDS") else (SOCK,)):
+        try:
+            os.unlink(f)
+        except OSError:
+            pass
+    disarm()

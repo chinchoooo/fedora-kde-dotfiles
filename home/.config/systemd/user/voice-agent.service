@@ -1,5 +1,7 @@
 [Unit]
-Description=Voice agent (persistent Haiku assistant for Right Shift commands)
+Description=Voice agent (Haiku assistant; started by voice-agent.socket, exits after 3 min idle)
+Requires=voice-agent.socket
+After=voice-agent.socket
 After=pipewire.service
 
 [Service]
@@ -9,7 +11,6 @@ Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
 Environment=PYTHONUNBUFFERED=1
 Restart=on-failure
 RestartSec=3
+ExecStopPost=/bin/rm -f %t/voice-agent.up %t/va-panic %t/va-gui.json %h/.cache/voice-agent/armed
 Nice=10
 
-[Install]
-WantedBy=default.target

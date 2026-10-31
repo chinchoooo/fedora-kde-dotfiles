@@ -4,7 +4,8 @@
                 (voice_agent.py, persistent Haiku session; falls back to the one-shot voice_act.py if the daemon is down)
                 (only the transcript text goes to Claude; audio never leaves the machine).
 Raw key events are read from /dev/input only to watch those two keys; nothing is logged or stored.
-Taps under 0.3 s and chords (another key pressed while held) are ignored, so normal Ctrl/Shift shortcuts keep working."""
+Taps under 0.3 s and chords (another key pressed while held) are ignored, so normal Ctrl/Shift shortcuts keep working;
+except that a lone Right Shift tap while the voice agent is busy is a PANIC STOP (the daemon is asked first, an idle agent is untouched)."""
 import glob, os, selectors, shutil, socket, struct, subprocess, tempfile, threading, time, wave
 import numpy as np
 
@@ -38,6 +39,42 @@ def agent_send(line, wait=60.0):
             pass
     s.close()
     return True
+
+def agent_query(cmd):
+    """Send a control line to the daemon and return its one-line reply ('' if unreachable)."""
+    try:
+        s = socket.socket(socket.AF_UNIX); s.settimeout(5)
+        s.connect(AGENT_SOCK)
+        s.sendall((cmd + "\n").encode())
+        r = s.recv(64).decode().strip()
+        s.close()
+        return r
+    except OSError:
+        return ""
+
+ARMED = os.path.expanduser("~/.cache/voice-agent/armed")
+UP_FLAG = os.path.join(os.environ.get("XDG_RUNTIME_DIR", "/run/user/1000"), "voice-agent.up")
+
+def arm():
+    """Write the 'armed' stamp. ONLY here, ONLY after a real Right Shift hold (from key events). va-act and va-guard refuse
+    GUI input and workspace writes when this stamp is missing or older than 180 s."""
+    try:
+        os.makedirs(os.path.dirname(ARMED), mode=0o700, exist_ok=True)
+        tmp = ARMED + ".tmp"
+        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        os.write(fd, str(time.time()).encode()); os.close(fd)
+        os.replace(tmp, ARMED)
+    except OSError:
+        pass
+
+def panic_check():
+    """A quick tap of Right Shift: if (and only if) the agent is busy, PANIC STOP it. Normal Shift typing never reaches here
+    (it is a chord with another key, which is discarded) and an idle agent is left alone."""
+    if not os.path.exists(UP_FLAG):             # daemon asleep: nothing to stop, and do not wake it
+        return
+    if agent_query("\x00busy") == "1":
+        agent_query("\x00stop")
+        close_notification()
 
 model = None
 model_lock = threading.Lock()
@@ -169,6 +206,8 @@ def main():
     def stop(discard):
         nonlocal rec, wav, mode, shown
         rec.terminate(); rec.wait(); rec = None
+        if not discard and mode == "command" and not NO_AGENT and time.monotonic() - t0 < HOLD_MIN:
+            threading.Thread(target=panic_check, daemon=True).start()        # tap while the agent works = panic stop
         if discard or time.monotonic() - t0 < HOLD_MIN:
             try:
                 os.unlink(wav)
@@ -176,6 +215,8 @@ def main():
                 pass
             close_notification()
         else:
+            if mode == "command":
+                arm()                                   # a real, completed Right Shift hold
             notify("Transcribing..." if mode == "dictate" else "Understanding command...", 3000)
             threading.Thread(target=handle, args=(wav, mode), daemon=True).start()
         shown = False; mode = None

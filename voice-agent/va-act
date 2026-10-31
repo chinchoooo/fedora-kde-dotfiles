@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 """va-act: the ONLY command the voice agent may run. Every subcommand validates its arguments.
-Deliberately absent: deleting, installing, arbitrary commands, typing/clicking, sending messages, system settings.
+Deliberately absent: deleting, installing, arbitrary commands, sending messages, system settings. GUI input (key/type/click/...) lives in va_gui.py behind a window blocklist, rate limit, panic flag and log.
 Add a subcommand: write cmd_<name>(args), register it in COMMANDS below, document it in README.md (and the agent/CLAUDE.md list)."""
 import argparse, glob, json, os, re, subprocess, sys, time
 from urllib.parse import quote_plus, urlparse
@@ -133,15 +133,55 @@ def cmd_brightness(a):
     print(f"brightness {round(100 * int(cur) / int(mx))}%")
 
 
+def draw_grid(path, logical):
+    """Overlay a labelled coordinate grid (every 100 px, in logical screen pixels = the coordinates `click` uses)."""
+    from PIL import Image, ImageDraw, ImageFont
+    im = Image.open(path).convert("RGBA")
+    if logical and im.size != tuple(logical):
+        im = im.resize(tuple(logical))
+    W, H = im.size
+    ov = Image.new("RGBA", im.size, (0, 0, 0, 0))
+    d = ImageDraw.Draw(ov)
+    try:
+        font = ImageFont.load_default(size=13)
+    except TypeError:
+        font = ImageFont.load_default()
+    for x in range(0, W, 100):
+        d.line([(x, 0), (x, H)], fill=(255, 0, 80, 110 if x % 500 else 190), width=1)
+    for y in range(0, H, 100):
+        d.line([(0, y), (W, y)], fill=(255, 0, 80, 110 if y % 500 else 190), width=1)
+
+    def label(x, y, t):
+        x = min(max(x, 0), W - 44); y = min(max(y, 0), H - 16)
+        d.rectangle([x, y, x + 8 * len(t) + 2, y + 15], fill=(0, 0, 0, 170))
+        d.text((x + 2, y + 1), t, fill=(255, 255, 0, 255), font=font)
+    for x in range(0, W, 100):
+        label(x + 2, 0, str(x)); label(x + 2, H - 16, str(x))
+    for y in range(0, H, 100):
+        label(0, y + 2, str(y)); label(W - 44, y + 2, str(y))
+    for x in range(200, W, 200):
+        for y in range(200, H, 200):
+            label(x + 2, y + 2, f"{x},{y}")
+    Image.alpha_composite(im, ov).convert("RGB").save(path)
+
+
 def cmd_screenshot(a):
     os.makedirs(SHOTS, mode=0o700, exist_ok=True)
     for f in glob.glob(SHOTS + "/*.png"):      # keep the directory tidy: drop shots older than 1 hour
         if time.time() - os.path.getmtime(f) > 3600:
             os.unlink(f)
-    path = f"{SHOTS}/shot-{int(time.time())}.png"
+    path = f"{SHOTS}/shot-{'grid-' if a.grid else ''}{int(time.time() * 1000)}.png"
     subprocess.run(["spectacle", "-b", "-n", "-f", "-o", path], capture_output=True, timeout=30)
     if not os.path.exists(path):
         fail("screenshot failed")
+    if a.grid:
+        sys.path.insert(0, HERE)
+        import va_gui
+        try:
+            _, scr = va_gui.screen_and_window()
+            draw_grid(path, scr)
+        except Exception as e:
+            fail("could not draw the grid: " + str(e))
     print(path)
 
 
@@ -225,6 +265,205 @@ def cmd_wifi_status(a):
     print(run(["nmcli", "-t", "-f", "TYPE,STATE,CONNECTION", "device"]) or "no network info")
 
 
+# ---------------------------------------------------------------- GUI input (guarded in va_gui.py)
+def gui(fn):
+    """Run a GUI subcommand: refusals and bad input print 'refused: why' and exit 3."""
+    sys.path.insert(0, HERE)
+    import va_gui
+    try:
+        fn(va_gui)
+    except va_gui.Refused as e:
+        print("refused: " + str(e))
+        sys.exit(3)
+    except subprocess.CalledProcessError as e:
+        fail("ydotool failed: " + (e.stderr or b"").decode(errors="replace")[:200])
+
+
+def cmd_key(a):
+    def f(g):
+        mset, key = g.parse_combo(a.combo)
+        g.gate("key", a.combo)
+        g.send_combo(a.combo)
+        print("pressed " + a.combo + "; take a screenshot to verify")
+    gui(f)
+
+
+def cmd_type(a):
+    def f(g):
+        text = g.validate_text(" ".join(a.text))
+        g.gate("type", text)
+        g.send_text(text)
+        print(f"typed {len(text)} characters; take a screenshot to verify")
+    gui(f)
+
+
+def cmd_click(a):
+    def f(g):
+        win, scr = g.gate("click", f"{a.x} {a.y} {a.kind}")
+        pos = g.click(a.x, a.y, scr, a.kind)
+        print(f"{a.kind} click at {pos[0]},{pos[1]}; take a screenshot to verify")
+    gui(f)
+
+
+def cmd_move(a):
+    def f(g):
+        win, scr = g.gate("move", f"{a.x} {a.y}")
+        pos = g.move_abs(a.x, a.y, scr)
+        print(f"pointer at {pos[0]},{pos[1]}")
+    gui(f)
+
+
+def cmd_scroll(a):
+    def f(g):
+        if not 1 <= a.n <= 30:
+            raise g.Refused("scroll amount must be 1-30")
+        g.gate("scroll", f"{a.direction} {a.n}")
+        g.scroll(a.direction, a.n)
+        print(f"scrolled {a.direction} {a.n}; take a screenshot to verify")
+    gui(f)
+
+
+def cmd_active_window(a):
+    sys.path.insert(0, HERE)
+    import va_gui
+    win, scr = va_gui.screen_and_window()
+    if not win:
+        print("no active window")
+        return
+    print(f"class={win['cls']} title={win['title'][:150]!r} geometry={win['x']},{win['y']} {win['w']}x{win['h']} screen={scr[0]}x{scr[1]}")
+
+
+FOCUS_JS = ('var q=%s;var hit=null;workspace.windowList().forEach(function(w){if(hit||!w.normalWindow)return;'
+            'if(w.caption.toLowerCase().indexOf(q)>=0||String(w.resourceClass).toLowerCase().indexOf(q)>=0)hit=w;});'
+            'if(hit){workspace.activeWindow=hit;}callDBus("@NAME@","@PATH@","@NAME@","Report",JSON.stringify(hit?hit.caption:null));')
+
+
+def cmd_focus(a):
+    q = " ".join(a.query).strip().lower()
+    if not re.fullmatch(r"[\w .:+/-]{1,60}", q):
+        fail("window name may only contain letters, digits and . : + / - and spaces")
+    sys.path.insert(0, HERE)
+    import va_gui
+    try:
+        if va_gui.panic_active():
+            raise va_gui.Refused("stopped by the user (panic stop)")
+        va_gui.require_armed()
+    except va_gui.Refused as e:
+        va_gui.log_action("focus", q, None, "REFUSED: " + str(e)); print("refused: " + str(e)); sys.exit(3)
+    if va_gui.dry():
+        va_gui.log_action("focus", q, None, "DRY"); print("DRY would focus a window matching " + q); return
+    t = va_gui.kwin_eval(FOCUS_JS % json.dumps(q))
+    va_gui.log_action("focus", q, {"cls": "-", "title": t or ""}, "ok" if t else "no match")
+    print(("focused: " + t[:120]) if t else "no window matches " + q)
+
+
+BROWSER_SIMPLE = {"close-tab": "ctrl+w", "new-tab": "ctrl+t", "next-tab": "ctrl+tab", "prev-tab": "ctrl+shift+tab",
+                  "reopen-closed": "ctrl+shift+t", "reload": "ctrl+r", "back": "alt+left", "forward": "alt+right",
+                  "fullscreen": "f11"}
+BROWSER_ACTIONS = list(BROWSER_SIMPLE) + ["goto-tab", "search-tab", "find", "mute-site", "close-tabs-matching"]
+
+
+def cmd_browser(a):
+    def f(g):
+        act, text = a.action, " ".join(a.text).strip()
+        if act in BROWSER_SIMPLE:
+            g.gate("browser " + act, "", require_browser=True)
+            g.send_combo(BROWSER_SIMPLE[act])
+            print(act + " done; take a screenshot to verify")
+        elif act == "goto-tab":
+            if not text.isdigit() or not 1 <= int(text) <= 9:
+                raise g.Refused("goto-tab needs a number 1-9 (9 is the last tab)")
+            g.gate("browser goto-tab", text, require_browser=True)
+            g.send_combo("ctrl+" + text)
+            print("switched to tab " + text)
+        elif act in ("search-tab", "find"):
+            text = g.validate_text(text, 100)
+            g.gate("browser " + act, text, cost=3, require_browser=True)
+            g.send_combo("ctrl+shift+a" if act == "search-tab" else "ctrl+f")
+            time.sleep(0.5)
+            g.send_text(text)
+            time.sleep(0.4)
+            g.send_combo("enter")
+            print(act + " for " + text + " done; take a screenshot to verify")
+        elif act == "mute-site":
+            raise g.Refused("the browser has no keyboard shortcut to mute a site; use `va-act media pause` or `va-act volume mute`")
+        elif act == "close-tabs-matching":
+            close_tabs_matching(g, g.validate_text(text, 60).lower())
+    gui(f)
+
+
+def close_tabs_matching(g, needle, max_close=15, max_steps=45):
+    """Walk the tabs with Ctrl+Tab; close the active tab when its window title contains `needle`. Verified by re-reading the
+    title after each key press. Tabs whose title looks sensitive are skipped, never touched. Stops after 15 closes."""
+    win, _ = g.gate("browser close-tabs-matching", needle, require_browser=True)
+    if g.dry():
+        print(f"DRY would close up to {max_close} tabs whose title contains {needle!r} and then take a verification screenshot")
+        return
+    closed, seen, steps = 0, {}, 0
+    while closed < max_close and steps < max_steps:
+        win, _ = g.screen_and_window()
+        title = (win or {}).get("title", "")
+        if g.check_window(win) and not any(b in ((win or {}).get("cls", "")).lower() for b in g.BROWSER_CLASSES):
+            print("stopped: the active window changed to something blocked"); break
+        low = title.lower()
+        if needle in low and not g.check_window(win):
+            g.gate("browser close-tab(loop)", needle, require_browser=True)
+            g.send_combo("ctrl+w"); time.sleep(0.35)
+            win2, _ = g.screen_and_window()
+            if (win2 or {}).get("title", "") == title:
+                print("stopped: the tab did not close"); break
+            closed += 1; seen.clear()
+            print(f"closed: {title[:60]}")
+            continue
+        seen[low] = seen.get(low, 0) + 1
+        if seen[low] > 1:
+            break                                         # went all the way round
+        g.send_combo("ctrl+tab"); time.sleep(0.3); steps += 1
+    print(f"closed {closed} tab(s); checking the screen")
+    cmd_screenshot(argparse.Namespace(grid=False))
+
+
+WORKSPACE = os.path.expanduser("~/va-workspace")
+OPEN_EXT = {".txt", ".md", ".html", ".htm", ".pdf", ".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp", ".csv", ".json", ".odt", ".ods",
+            ".odp", ".docx", ".xlsx", ".pptx", ".mp3", ".mp4", ".wav", ".ogg", ".webm", ".mkv", ".log", ".css", ".js", ".xml", ".yaml", ".yml"}
+
+
+def workspace_path(p):
+    os.makedirs(WORKSPACE, exist_ok=True)
+    rp = os.path.realpath(os.path.expanduser(p) if p.startswith("~") else os.path.join(WORKSPACE, p) if not os.path.isabs(p) else p)
+    if rp != WORKSPACE and not rp.startswith(WORKSPACE + os.sep):
+        fail("path must be inside ~/va-workspace")
+    return rp
+
+
+def need_armed():
+    sys.path.insert(0, HERE)
+    import va_gui
+    try:
+        va_gui.require_armed()
+    except va_gui.Refused as e:
+        print("refused: " + str(e)); sys.exit(3)
+
+
+def cmd_open_file(a):
+    need_armed()
+    rp = workspace_path(" ".join(a.path))
+    if not os.path.exists(rp):
+        fail("no such file in ~/va-workspace")
+    if os.path.isfile(rp):
+        if os.access(rp, os.X_OK) or os.path.splitext(rp)[1].lower() not in OPEN_EXT:
+            fail("that file type is not opened by the agent (executables and scripts are never opened)")
+    detach(["xdg-open", rp])
+    print("opened " + os.path.relpath(rp, WORKSPACE))
+
+
+def cmd_make_folder(a):
+    need_armed()
+    rp = workspace_path(" ".join(a.path))
+    os.makedirs(rp, exist_ok=True)
+    print("folder ready: " + os.path.relpath(rp, WORKSPACE))
+
+
 COMMANDS = {}
 
 
@@ -245,7 +484,17 @@ def build():
     add("volume", cmd_volume, ("value", {}))
     add("get-volume", cmd_get_volume)
     add("brightness", cmd_brightness, ("value", {}))
-    add("screenshot", cmd_screenshot)
+    add("screenshot", cmd_screenshot, ("--grid", {"action": "store_true"}))
+    add("key", cmd_key, ("combo", {}))
+    add("type", cmd_type, ("text", {"nargs": "+"}))
+    add("click", cmd_click, ("x", {"type": int}), ("y", {"type": int}), ("kind", {"nargs": "?", "default": "left", "choices": ["left", "right", "double"]}))
+    add("move", cmd_move, ("x", {"type": int}), ("y", {"type": int}))
+    add("scroll", cmd_scroll, ("direction", {"choices": ["up", "down"]}), ("n", {"type": int}))
+    add("active-window", cmd_active_window)
+    add("focus", cmd_focus, ("query", {"nargs": "+"}))
+    add("browser", cmd_browser, ("action", {"choices": BROWSER_ACTIONS}), ("text", {"nargs": "*"}))
+    add("open-file", cmd_open_file, ("path", {"nargs": "+"}))
+    add("make-folder", cmd_make_folder, ("path", {"nargs": "+"}))
     add("notify", cmd_notify, ("text", {"nargs": "+"}))
     add("speak", cmd_speak, ("text", {"nargs": "+"}))
     add("tile-split", cmd_tile_split)
