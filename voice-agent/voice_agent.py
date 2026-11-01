@@ -124,12 +124,21 @@ class Speaker:
         return f
 
     async def _play(self, f):
-        self.proc = await asyncio.create_subprocess_exec("pw-play", f)
-        await self.proc.wait()
+        from speaklock import SpeakLock
+        subprocess.run(["pkill", "-f", "tts/kspeak"], capture_output=True)   # the agent has priority over reply read-aloud
+        lock = SpeakLock()
+        got = await asyncio.get_running_loop().run_in_executor(None, lock.acquire, 8.0)
         try:
-            os.unlink(f)
-        except OSError:
-            pass
+            if got:
+                self.proc = await asyncio.create_subprocess_exec("pw-play", f)
+                await self.proc.wait()
+        finally:
+            if got:
+                lock.release()
+            try:
+                os.unlink(f)
+            except OSError:
+                pass
 
     async def run(self):
         loop = asyncio.get_running_loop()

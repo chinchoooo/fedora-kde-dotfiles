@@ -10,6 +10,16 @@ VOICE = os.environ.get("SPEAK_VOICE", "af_heart")      # natural American Englis
 SPEED = float(os.environ.get("SPEAK_SPEED", "1.05"))
 
 def main():
+    from speaklock import SpeakLock
+    lock = SpeakLock()
+    if not lock.acquire(float(os.environ.get('SPEAK_LOCK_WAIT', '8'))):
+        return                      # someone else is speaking: never talk over them
+    try:
+        _speak()
+    finally:
+        lock.release()
+
+def _speak():
     text = " ".join(sys.argv[1:]).strip() or sys.stdin.read().strip()
     if not text:
         return
