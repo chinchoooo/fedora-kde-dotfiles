@@ -1,45 +1,86 @@
 #!/usr/bin/env python3
-"""Claude Code Stop hook: speaks the assistant's final reply on-device (Kokoro af_heart via `speak`).
-Reads the hook JSON on stdin, finds the last assistant message in the transcript, strips markdown/code/links,
-speaks the first ~420 characters (cut at a sentence end) and says the rest is on screen when it was cut."""
-import json, os, re, subprocess, sys
+"""Claude Code Stop hook: speaks the reply to the CURRENT prompt on-device (Kokoro af_heart via `speak`).
+- Waits (up to ~5 s) for the final assistant message of this turn to reach the transcript, so it never reads the previous turn's reply.
+- Stays silent while the user is looking at the terminal (the KWin script keeps ~/.cache/focus-console), unless ~/.cache/speak-always exists.
+- Strips markdown/code/links, speaks the first ~420 characters (cut at a sentence end) and says the rest is on screen when cut."""
+import hashlib, json, os, re, subprocess, sys, time
+
+HOME = os.path.expanduser("~")
+CACHE = os.path.join(HOME, ".cache")
+
+def rows_of(path):
+    out = []
+    try:
+        with open(path, encoding="utf-8") as f:
+            for line in f:
+                try:
+                    out.append(json.loads(line))
+                except ValueError:
+                    pass
+    except OSError:
+        pass
+    return out
+
+def is_user_prompt(r):
+    m = r.get("message") if isinstance(r.get("message"), dict) else None
+    if r.get("type") != "user" or not m:
+        return False
+    c = m.get("content")
+    if isinstance(c, str):
+        return bool(c.strip())
+    return any(isinstance(b, dict) and b.get("type") == "text" and b.get("text", "").strip() for b in (c or []))
+
+def text_of(r):
+    m = r.get("message") if isinstance(r.get("message"), dict) else {}
+    c = m.get("content")
+    if isinstance(c, str):
+        return c
+    return "\n".join(b.get("text", "") for b in (c or []) if isinstance(b, dict) and b.get("type") == "text")
+
+def reply_for_current_turn(path, wait=5.0):
+    end = time.time() + wait
+    while True:
+        rows = rows_of(path)
+        last_user = max((i for i, r in enumerate(rows) if is_user_prompt(r)), default=-1)
+        texts = [text_of(r) for r in rows[last_user + 1:] if r.get("type") == "assistant" and text_of(r).strip()]
+        if texts:
+            return texts[-1]
+        if time.time() > end:
+            return ""
+        time.sleep(0.3)
+
+def clean(last):
+    t = re.sub(r"```.*?```", " ", last, flags=re.S)
+    t = re.sub(r"`([^`]*)`", r"\1", t)
+    t = re.sub(r"\[([^\]]*)\]\([^)]*\)", r"\1", t)
+    t = re.sub(r"https?://\S+", " ", t)
+    t = re.sub(r"^\s*\|.*\|\s*$", " ", t, flags=re.M)
+    t = re.sub(r"^\s*(#+|[-*>]|\d+\.)\s*", "", t, flags=re.M)
+    t = re.sub(r"[*_~]+", "", t)
+    t = re.sub(r"\s+", " ", t).strip()
+    LIM = 420
+    if len(t) > LIM:
+        part = t[:LIM]
+        k = max(part.rfind(". "), part.rfind("? "), part.rfind("! "))
+        t = (part[: k + 1] if k > 120 else part.rsplit(" ", 1)[0] + ".") + " The rest is on screen."
+    return t
 
 try:
     data = json.load(sys.stdin)
-    path = data.get("transcript_path", "")
-    last = ""
-    with open(path, encoding="utf-8") as f:
-        for line in f:
-            try:
-                d = json.loads(line)
-            except ValueError:
-                continue
-            m = d.get("message") if isinstance(d.get("message"), dict) else None
-            if d.get("type") == "assistant" and m:
-                c = m.get("content")
-                t = c if isinstance(c, str) else "\n".join(b.get("text", "") for b in (c or []) if isinstance(b, dict) and b.get("type") == "text")
-                if t.strip():
-                    last = t
-    if not last:
-        sys.exit(0)
-    t = re.sub(r"```.*?```", " ", last, flags=re.S)                  # code blocks
-    t = re.sub(r"`([^`]*)`", r"\1", t)                               # inline code
-    t = re.sub(r"\[([^\]]*)\]\([^)]*\)", r"\1", t)                   # links -> label
-    t = re.sub(r"https?://\S+", " ", t)
-    t = re.sub(r"^\s*\|.*\|\s*$", " ", t, flags=re.M)                # tables
-    t = re.sub(r"^\s*(#+|[-*>]|\d+\.)\s*", "", t, flags=re.M)        # headings, bullets
-    t = re.sub(r"[*_~]+", "", t)
-    t = re.sub(r"\s+", " ", t).strip()
+    if os.path.exists(os.path.join(CACHE, "focus-console")) and not os.path.exists(os.path.join(CACHE, "speak-always")):
+        sys.exit(0)                                             # the user is looking at the terminal: stay quiet
+    t = clean(reply_for_current_turn(data.get("transcript_path", "")))
     if not t:
         sys.exit(0)
-    LIM = 420
-    cut = len(t) > LIM
-    if cut:
-        part = t[:LIM]
-        k = max(part.rfind(". "), part.rfind("? "), part.rfind("! "))
-        t = part[: k + 1] if k > 120 else part.rsplit(" ", 1)[0] + "."
-        t += " The rest is on screen."
-    subprocess.run(["pkill", "-f", "kspeak.py"], capture_output=True)    # never overlap an earlier reply
-    subprocess.Popen([os.path.expanduser("~/.local/bin/speak"), t], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+    h = hashlib.sha1(t.encode()).hexdigest()
+    mark = os.path.join(CACHE, "speak-reply-last")
+    if os.path.exists(mark) and open(mark).read().strip() == h:
+        sys.exit(0)                                             # never repeat the same reply
+    open(mark, "w").write(h)
+    if os.environ.get("SPEAK_REPLY_DRY"):
+        print("WOULD SPEAK:", t)
+        sys.exit(0)
+    subprocess.run(["pkill", "-f", "tts/kspeak"], capture_output=True)   # never overlap an earlier reply
+    subprocess.Popen([os.path.join(HOME, ".local/bin/speak"), t], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
 except Exception:
     pass
