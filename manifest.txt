@@ -90,3 +90,5 @@
 ~/code/voice-agent/test_va_gui.py  voice-agent/test_va_gui.py
 ~/.config/systemd/user/voice-agent.socket  home/.config/systemd/user/voice-agent.socket
 ~/.config/powerdevilrc  home/.config/powerdevilrc
+~/code/voice-agent/speaklock.py  voice-agent/speaklock.py
+~/code/voice-agent/tts/speaklock.py  voice-agent/tts/speaklock.py
