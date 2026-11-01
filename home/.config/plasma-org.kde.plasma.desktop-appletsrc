@@ -56,7 +56,7 @@ immutability=1
 plugin=org.kde.plasma.icontasks
 
 [Containments][2][Applets][60][Configuration][General]
-launchers=applications:org.kde.konsole.desktop,applications:org.kde.dolphin.desktop,applications:helium.desktop,applications:com.spotify.Client.desktop,applications:dev.zed.Zed.desktop,applications:google-chrome.desktop
+launchers=applications:org.kde.dolphin.desktop,applications:org.kde.konsole.desktop,applications:helium.desktop,applications:com.spotify.Client.desktop,applications:dev.zed.Zed.desktop,applications:google-chrome.desktop
 maxStripes=1
 
 [Containments][2][Applets][61]
