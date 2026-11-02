@@ -1,0 +1,42 @@
+#!/usr/bin/env python3
+"""claude-usage [days]  -  daily and hourly token usage on this machine, rebuilt from Claude Code's own session logs
+(~/.claude/projects, including subagents). Times are IST. Cache reads are listed separately: they are cheap, output and cache writes are the heavy part.
+This only sees this computer, not other devices, and it cannot show the plan's exact limit percentage (use /usage in Claude Code for that)."""
+import collections, datetime, glob, json, os, sys
+
+days = int(sys.argv[1]) if len(sys.argv) > 1 else 4
+root = os.path.expanduser("~/.claude/projects")
+files = glob.glob(root + "/*/*.jsonl") + glob.glob(root + "/*/*/subagents/*.jsonl")
+IST = datetime.timedelta(hours=5, minutes=30)
+cut = (datetime.datetime.utcnow() + IST - datetime.timedelta(days=days - 1)).strftime("%m-%d")
+seen = set(); day = collections.defaultdict(lambda: [0] * 5); hour = collections.defaultdict(lambda: [0] * 5); mod = collections.defaultdict(lambda: [0] * 5)
+for f in files:
+    for line in open(f, encoding="utf-8", errors="ignore"):
+        try:
+            r = json.loads(line)
+        except ValueError:
+            continue
+        m = r.get("message")
+        if not isinstance(m, dict) or r.get("type") != "assistant" or not m.get("usage") or not r.get("timestamp"):
+            continue
+        k = (m.get("id"), r.get("requestId"))
+        if k[0] and k in seen:
+            continue
+        seen.add(k)
+        u = m["usage"]
+        t = datetime.datetime.fromisoformat(r["timestamp"].replace("Z", "+00:00")).replace(tzinfo=None) + IST
+        v = [u.get("input_tokens", 0), u.get("output_tokens", 0), u.get("cache_creation_input_tokens", 0), u.get("cache_read_input_tokens", 0), 1]
+        for d, key in ((day, t.strftime("%m-%d")), (hour, t.strftime("%m-%d %H:00")), (mod, (t.strftime("%m-%d"), m.get("model", "?")))):
+            for i in range(5):
+                d[key][i] += v[i]
+print("day    output+fresh   cache writes   cache reads    calls")
+for k in sorted(day):
+    if k >= cut:
+        a = day[k]; print(f"{k}  {a[0]+a[1]:>12,} {a[2]:>14,} {a[3]:>14,} {a[4]:>8}")
+print("\nbusiest hours (output tokens):")
+for k, a in sorted(sorted(((k, a) for k, a in hour.items() if k[:5] >= cut), key=lambda kv: -kv[1][1])[:8]):
+    print(f"{k}  output {a[1]:>9,}  cache writes {a[2]:>10,}  calls {a[4]}")
+print("\nby model:")
+for k in sorted(mod):
+    if k[0] >= cut and mod[k][4]:
+        print(f"{k[0]}  {k[1]:<22} output {mod[k][1]:>9,}  calls {mod[k][4]}")
