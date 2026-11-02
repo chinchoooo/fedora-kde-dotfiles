@@ -189,6 +189,10 @@ knownItems=org.kde.kdeconnect,org.kde.plasma.vault,org.kde.kscreen,org.kde.plasm
 immutability=1
 plugin=com.chinchoo.sysdiag
 
+[Containments][31][Applets][66][Configuration]
+popupHeight=385
+popupWidth=383
+
 [Containments][31][Applets][67]
 immutability=1
 plugin=com.chinchoo.resume
