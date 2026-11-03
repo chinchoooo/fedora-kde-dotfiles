@@ -1,3 +1,6 @@
+[Applications][google-chrome]
+Seen=true
+
 [Applications][org.kde.konsole]
 ShowBadges=false
 ShowInHistory=false
