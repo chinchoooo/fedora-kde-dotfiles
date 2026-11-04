@@ -5,3 +5,6 @@ Seen=true
 ShowBadges=false
 ShowInHistory=false
 ShowPopups=false
+
+[DoNotDisturb]
+NotificationSoundsMuted=true
