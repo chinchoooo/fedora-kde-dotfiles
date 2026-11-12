@@ -75,8 +75,16 @@ plugin=org.kde.plasma.digitalclock
 popupHeight=400
 popupWidth=560
 
+[Containments][2][Applets][68]
+immutability=1
+plugin=org.kde.plasma.icon
+
+[Containments][2][Applets][68][Configuration]
+localPath=@HOME@/.local/share/plasma_icons/results.zip.desktop
+url=file://@HOME@/Downloads/results.zip
+
 [Containments][2][General]
-AppletOrder=58;59;60;61;64;65
+AppletOrder=58;68;59;60;61;64;65
 
 [Containments][31]
 activityId=
