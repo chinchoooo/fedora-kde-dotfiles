@@ -1,0 +1,13 @@
+{
+  "KPackageStructure": "Plasma/Applet",
+  "KPlugin": {
+    "Id": "com.chinchoo.ccstatus",
+    "Name": "Claude Status",
+    "Description": "Live status of Claude Code: current action, state, elapsed time, progress and ETA",
+    "Icon": "utilities-terminal",
+    "Category": "System",
+    "Version": "1.0",
+    "License": "GPL-2.0+"
+  },
+  "X-Plasma-API-Minimum-Version": "6.0"
+}

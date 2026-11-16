@@ -1,20 +1,22 @@
 #!/usr/bin/env python3
-"""cc-status: ONE self-replacing KDE notification showing what Claude Code is doing right now.
-Same style as the dictation popup (notify-send, reused id, never stacks), plus a live progress bar.
+"""cc-status: publishes what Claude Code is doing right now to a state file that the
+'Claude Status' Plasma panel widget (com.chinchoo.ccstatus) renders live.
+A desktop popup is shown ONLY when attention is needed (done / failed / waiting for you).
 
-  cc-status "Transcribing audio" --pct 42 --eta 12m     manual update (used by Claude for long jobs)
-  cc-status --done "Subtitles ready"                    finish (auto-closes after a few seconds)
-  cc-status --fail "Transcription crashed"              error (stays until dismissed)
+  cc-status "Transcribing audio" --pct 42 [--eta 12m]   progress update (ETA is computed from the rate if omitted)
+  cc-status --done "Subtitles ready"                    finished   (popup, widget shows a check, then idles)
+  cc-status --fail "Transcription crashed"              error      (popup stays until dismissed)
+  cc-status --idle                                      clear
   cc-status --hook                                      Claude Code hook mode (reads hook JSON on stdin)
 
-Mute: touch ~/.cache/cc-status-off   (rm to re-enable)
+Mute popups: touch ~/.cache/cc-status-off      State file: $XDG_RUNTIME_DIR/cc-status.json
 """
 import json, os, subprocess, sys, time
 
 RUN = os.environ.get("XDG_RUNTIME_DIR", "/run/user/1000")
 STATE = os.path.join(RUN, "cc-status.json")
 OFF = os.path.expanduser("~/.cache/cc-status-off")
-MANUAL_TTL = 120          # a manual pct/eta survives hook updates for this many seconds
+MANUAL_TTL = 180          # a manual pct survives hook-driven action changes for this long
 
 
 def load():
@@ -26,6 +28,7 @@ def load():
 
 
 def save(s):
+    s["updated"] = time.time()
     tmp = STATE + ".tmp"
     with open(tmp, "w") as f:
         json.dump(s, f)
@@ -34,32 +37,15 @@ def save(s):
 
 def fmt(sec):
     sec = int(sec)
-    return f"{sec // 60}m{sec % 60:02d}s" if sec >= 60 else f"{sec}s"
+    return f"{sec // 3600}h{sec % 3600 // 60:02d}m" if sec >= 3600 else f"{sec // 60}m{sec % 60:02d}s" if sec >= 60 else f"{sec}s"
 
 
-def bar(pct, n=14):
-    k = round(pct * n / 100)
-    return "▰" * k + "▱" * (n - k)
-
-
-def show(s, action, pct=None, eta=None, level="run", timeout=0):
+def popup(s, title, body, urgency="low", timeout=5000):
     if os.path.exists(OFF):
         return
-    elapsed = time.time() - s.get("start", time.time())
-    icon = {"run": "⏵", "done": "✓", "fail": "✕", "wait": "◔"}[level]
-    head = {"run": "working", "done": "done", "fail": "failed", "wait": "needs you"}[level]
-    title = f"Claude Code · {head} · {fmt(elapsed)}"
-    body = f"{icon} {action}"
-    if pct is not None:
-        body += f"\n{bar(pct)} {pct}%"
-    if eta:
-        body += f"  ·  ~{eta} left"
-    cmd = ["notify-send", "-p", "-a", "Claude Code", "-u", "critical" if level == "fail" else "low",
-           "-t", str(timeout), "-e"]
+    cmd = ["notify-send", "-p", "-a", "Claude Code", "-u", urgency, "-t", str(timeout), "-e"]
     if s.get("nid"):
         cmd += ["-r", str(s["nid"])]
-    if pct is not None:
-        cmd += ["-h", f"int:value:{int(pct)}"]
     try:
         out = subprocess.run(cmd + [title, body], capture_output=True, text=True, timeout=5).stdout.strip()
     except (OSError, subprocess.SubprocessError):
@@ -72,10 +58,9 @@ def describe(d):
     t = d.get("tool_name", "")
     i = d.get("tool_input") or {}
     if t == "Bash":
-        txt = i.get("description") or i.get("command", "")
-        return "Running: " + " ".join(txt.split())[:60]
+        return "Running: " + " ".join((i.get("description") or i.get("command", "")).split())[:60]
     if t in ("Read", "Edit", "Write", "NotebookEdit"):
-        verb = {"Read": "Reading", "Edit": "Editing", "Write": "Writing"}.get(t, "Editing")
+        verb = {"Read": "Reading", "Write": "Writing"}.get(t, "Editing")
         return f"{verb} {os.path.basename(i.get('file_path', '') or i.get('notebook_path', ''))}"
     if t in ("Grep", "Glob"):
         return "Searching: " + str(i.get("pattern", ""))[:50]
@@ -85,9 +70,18 @@ def describe(d):
         return "Watching: " + str(i.get("description", ""))[:50]
     if t == "Skill":
         return "Skill: " + str(i.get("skill", ""))
-    if t == "WebSearch" or t == "WebFetch":
+    if t in ("WebSearch", "WebFetch"):
         return "Looking it up on the web"
     return t or "Working"
+
+
+def set_progress(s, pct, now):
+    """Track pct so the widget can derive a rate-based ETA."""
+    if pct is None:
+        return
+    if s.get("pct") is None or pct < s.get("pct", 0) or "p0" not in s:
+        s["p0"], s["p0_at"] = pct, now
+    s["pct"], s["pct_at"] = pct, now
 
 
 def hook():
@@ -98,18 +92,25 @@ def hook():
     ev = d.get("hook_event_name", "")
     s = load()
     now = time.time()
+    nid = s.get("nid")
     if ev == "UserPromptSubmit":
-        s = {"start": now, "nid": s.get("nid")}
-        show(s, "Thinking…")
+        s = {"nid": nid, "state": "run", "action": "Thinking…", "start": now}
     elif ev == "PreToolUse":
-        s.setdefault("start", now)
-        fresh = now - s.get("manual_at", 0) < MANUAL_TTL
-        show(s, describe(d), s.get("pct") if fresh else None, s.get("eta") if fresh else None)
+        if s.get("state") != "run" or not s.get("start"):
+            s = {"nid": nid, "state": "run", "start": now}
+        if now - s.get("manual_at", 0) > MANUAL_TTL:
+            for k in ("pct", "p0", "p0_at", "pct_at", "eta"):
+                s.pop(k, None)
+        s["action"] = describe(d)
+        s["tool_start"] = now
     elif ev == "Notification":
-        show(s, "Waiting for you", level="wait")
+        s["state"], s["action"] = "wait", "Waiting for you"
+        popup(s, "Claude Code needs you", d.get("message", "Waiting for your input"), "normal", 8000)
     elif ev == "Stop":
-        show(s, "Finished", level="done", timeout=4000)
-        s = {"nid": s.get("nid")}
+        el = now - s.get("start", now)
+        s = {"nid": nid, "state": "done", "action": "Finished", "start": s.get("start", now), "end": now}
+        if el > 60:                                    # only pop up for work that took a while
+            popup(s, "Claude Code · done", f"Finished in {fmt(el)}", "low", 4000)
     save(s)
 
 
@@ -118,28 +119,39 @@ def main():
     if "--hook" in a:
         return hook()
     pct = eta = None
-    level, timeout, words = "run", 0, []
+    mode, words = "run", []
     i = 0
     while i < len(a):
         if a[i] == "--pct":
             pct = max(0, min(100, int(float(a[i + 1])))); i += 1
         elif a[i] == "--eta":
             eta = a[i + 1]; i += 1
-        elif a[i] == "--done":
-            level, timeout = "done", 5000
-        elif a[i] == "--fail":
-            level = "fail"
+        elif a[i] in ("--done", "--fail", "--idle"):
+            mode = a[i][2:]
         else:
             words.append(a[i])
         i += 1
     s = load()
-    s.setdefault("start", time.time())
-    action = " ".join(words) or "Working"
-    if level == "run":
-        s.update(pct=pct, eta=eta, manual_at=time.time())
-    show(s, action, pct, eta, level, timeout)
-    if level != "run":
-        s = {"nid": s.get("nid")}
+    now = time.time()
+    action = " ".join(words)
+    if mode == "idle":
+        save({"state": "idle", "nid": s.get("nid")}); return
+    if mode in ("done", "fail"):
+        el = now - s.get("start", now)
+        s = {"nid": s.get("nid"), "state": mode, "action": action or ("Finished" if mode == "done" else "Failed"),
+             "start": s.get("start", now), "end": now}
+        popup(s, f"Claude Code · {'done' if mode == 'done' else 'FAILED'} · {fmt(el)}", s["action"],
+              "low" if mode == "done" else "critical", 5000 if mode == "done" else 0)
+        save(s); return
+    if s.get("state") != "run" or not s.get("start"):
+        s = {"nid": s.get("nid"), "start": now}
+    s["state"] = "run"
+    if action:
+        s["action"] = action
+    set_progress(s, pct, now)
+    if eta:
+        s["eta"] = eta
+    s["manual_at"] = now
     save(s)
 
 
