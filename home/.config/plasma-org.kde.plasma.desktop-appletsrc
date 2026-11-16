@@ -213,6 +213,10 @@ popupWidth=432
 immutability=1
 plugin=com.chinchoo.ccstatus
 
+[Containments][31][Applets][69][Configuration]
+popupHeight=45
+popupWidth=360
+
 [Containments][31][General]
 AppletOrder=66;67;35;37;38;69
 
