@@ -198,7 +198,7 @@ immutability=1
 plugin=com.chinchoo.sysdiag
 
 [Containments][31][Applets][66][Configuration]
-popupHeight=385
+popupHeight=541
 popupWidth=383
 
 [Containments][31][Applets][67]
