@@ -270,6 +270,7 @@ minicom
 moby-engine
 ModemManager
 mpage
+mpv
 mt7xxx-firmware
 mtr
 ncurses

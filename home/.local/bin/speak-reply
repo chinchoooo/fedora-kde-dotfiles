@@ -67,6 +67,8 @@ def clean(last):
 
 try:
     data = json.load(sys.stdin)
+    if os.path.exists(os.path.join(CACHE, "speak-off")):
+        sys.exit(0)                                             # hard mute: touch ~/.cache/speak-off, rm to re-enable
     if os.path.exists(os.path.join(CACHE, "focus-console")) and not os.path.exists(os.path.join(CACHE, "speak-always")):
         sys.exit(0)                                             # the user is looking at the terminal: stay quiet
     t = clean(reply_for_current_turn(data.get("transcript_path", "")))

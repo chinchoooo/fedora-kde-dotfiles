@@ -22,6 +22,10 @@
           {
             "type": "command",
             "command": "setsid -f ~/.local/bin/speak-away 'Claude needs your attention' >/dev/null 2>&1"
+          },
+          {
+            "type": "command",
+            "command": "~/.local/bin/cc-status --hook"
           }
         ]
       }
@@ -32,6 +36,30 @@
           {
             "type": "command",
             "command": "~/.local/bin/speak-reply"
+          },
+          {
+            "type": "command",
+            "command": "~/.local/bin/cc-status --hook"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.local/bin/cc-status --hook"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.local/bin/cc-status --hook"
           }
         ]
       }
